@@ -1,8 +1,17 @@
 # Oralia — Research & Gap Analysis
 
-**Status:** Research baseline for architecture planning  
-**Reviewed:** 4 November 2026  
-**Scope:** Browser playback and offline behavior, creator exports, age-tier prompt design, and operational gaps. This is a design recommendation, not an implementation.
+**Status:** Research baseline with local Phase 4 implementation notes
+**Reviewed:** 5 November 2026
+**Scope:** Browser playback and offline behavior, creator exports, age-tier prompt design, and operational gaps. Production recommendations are distinguished from the implemented local system below.
+
+## Local Phase 4 findings
+
+- **Database boundary:** Prisma/SQLite runs in TypeScript Vite dev/preview middleware under /api/v1. React consumes validated JSON; there is no Prisma import or catalog fixture fallback in the browser. Migration, db push and idempotent seeding are part of local setup. The seed preserves user bookmarks/accounts; migration and API tests use a separate temporary database.
+- **Authenticity and scope:** Eight abridged English adaptations identify their historical collection, region and cultural limitations. The sources include Barker/Sinclair's [West African Folk-Tales](https://www.gutenberg.org/files/66923/66923-h/66923-h.htm), Honey's [South-African Folk-Tales](https://www.gutenberg.org/cache/epub/38339/pg38339-images.html), and [Swahili Tales](https://en.wikisource.org/wiki/Swahili_Tales). Historical translations are not substitutes for contemporary community review. Do not label the southern African tink-tinkje tale as Zulu merely because both appear in a regional collection. Story-specific source notes travel to the Listening Room and export manifest.
+- **Audio provenance:** The bundled speech is Windows-synthesized English, marked STUDIO_AI, with measured PCM cue ranges. No original author microphone recordings or reviewed dialect translations are supplied. Seed age assignments support UI curation and are not formal school approvals. The four visual tiers preserve the same source narration rather than falsely claiming age-specific spoken adaptations.
+- **Failure behavior:** A local media availability endpoint avoids requesting a missing audio URL. Web Audio can render a quiet timing tone into a WAV blob; the normal HTML audio element then remains the only clock. Explicitly label the tone as non-narration, cancel stale synthesis work after source changes, and release blob URLs. Image errors preserve narration/transcript and the scene title. A missing database produces a visible retry state, never unrelated stories.
+- **Authentication simulation:** The requested email/PIN flow intentionally accepts any six digits and sends no email. Single-use five-minute challenges, hashed seven-day sessions, reserved collection addresses and account-scoped bookmark/voice writes support realistic local behavior; they do not verify email ownership. Persisting this requested simulator session in localStorage is a presentation contract, not a production identity design.
+- **Interaction audit:** Include nested Escape behavior, session/bookmark reload recovery, all 32 scene boundaries, both playback voice choices, missing-media tone playback, empty regional intersections, ZIP payload integrity, mobile header width and reduced motion. Offline PWA downloads, durable drafts, AI generation and real transactional email remain separate production work.
 
 ## Executive findings
 

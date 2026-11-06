@@ -1,16 +1,74 @@
 # Oralia — Architecture & Blueprint
 
-**Status:** Production blueprint with Phase 1 scaffold and Phase 2 interactive frontend implemented  
-**Date:** 4 November 2026  
-**Product:** Audio-first visual carousel for African oral storytelling, creator concepts, and curated education feeds.
+**Status:** Local database/API implementation plus production blueprint
+**Date:** 5 November 2026
+**Product:** Audio-first discovery, creator storyboards, and four-tier education.
 
-**Implementation update — 5 November 2026:** The React/Vite frontend includes all three modes, local story fixtures, Zod schemas, a shared audio carousel hook, session-only recording/upload preview, four-tier visual selection, and a real sample ZIP export with simulated email notification. Production AI, API, durable draft storage, queue, authentication, email, discovery pagination, and PWA offline support remain future work. The illustrated sample is original fiction with synthetic English narration, not an attributed traditional story or a dialect transcription.
+## Implemented local architecture
 
-Frontend `AppMode` uses `social_reel | creator_studio | education`. These UI state identifiers are distinct from the proposed API's mode labels. Frontend `Keyframe.startTime/endTime` represent the same seconds as the proposed API's `startSeconds/endSeconds`; the future API adapter owns that mapping. `Story.tierVariants` holds `StoryVariant` values, and `CreatorAssetBundle` describes the local studio preview/export. The navbar and App own mode/age preferences; the player hook owns media state. No server-state store is needed until the API is connected.
+React/Vite → validated fetch client → TypeScript Vite middleware → Prisma/libSQL adapter → SQLite. `vite.config.ts` alone imports `server/plugin.ts`; no React import graph reaches Prisma, the generated client, adapters, or Node APIs. Dev and preview share the same `/api/v1` handlers. A static client deployment alone does not supply these endpoints.
 
-**Phase 2 frontend update — 5 November 2026:** App owns a persisted light/dark appearance preference. `CaptionTranscript` auto-scrolls inside its own pane on cue changes; `KeyframeTimeline` derives thumbnail hover/focus previews from the same audio timeline. English captions are original; isiZulu/Swahili are explicitly pending placeholders. Overlay/language selection never changes the audio or source transcript. Education presentation is scoped per tier, and collection filters exclude the unassigned original fixture from regional traditions.
+`prisma/schema.prisma` defines `User`, `Story`, `KeyframeScene`, `Bookmark`, `OtpChallenge`, and `Session`. The initial SQL migration is committed. The local database is ignored at `prisma/oralia.db`; Prisma 7 connection/seed settings live in `prisma.config.ts`. `server/databaseUrl.ts` supplies the root-relative default or the process's `DATABASE_URL` override.
 
-The studio keeps `StoryboardFrame` values (`Keyframe` plus `prompt`) in local `CreatorAssetBundle` state. Reordering and duration edits use pure helpers to recalculate continuous seconds; studio time is independent of the source audio duration. `ExportModal` shows a native modal dialog and builds a ZIP preview before enabling download. `buildManifest`/`packageStoryboard` export `oralia-storyboard-v2` metadata, ordered assets, prompts, timings, file sizes, and SHA-256 image checksums. Notification status is simulated and no recipient or recording is stored in the archive. AI regeneration, reviewed translations, real regional content, and email transport remain future integrations.
+| Model | Current persisted contract |
+|---|---|
+| User | ID, name, unique username/email, avatarUrl, bio, CREATOR/READER role, preferredVoiceType; owns stories, bookmarks and sessions. |
+| Story | ID, title, description, canonical ageTier, regionTag, audioUrl, optional originalAudioUrl, ORIGINAL/STUDIO_AI voiceType, duration in seconds, authorId; also sourceTitle/sourceUrl/culturalNote, featured and publishedAt. |
+| KeyframeScene | ID, storyId, unique sceneNumber per story, title, narrationText, imageUrl, timestamp in seconds, photographer and photo-source URL. |
+| Bookmark | ID and unique userId/storyId pair; API authorizes current user. |
+| OtpChallenge | ID, normalized email, five-minute expiry, consumed flag. No actual PIN is sent or stored. |
+| Session | Hashed bearer token ID, userId, seven-day expiry. Raw token is returned only to the signing-in client. |
+
+AgeTier remains `5-9 | 10-13 | 14-17 | 18+`; UI uses en dashes. SQLite stores one validated tier per seed story. `server/catalog.ts` adapts each row into the shared `Story` contract with exactly that `tierVariants[ageTier]`. A scene's endTime is the next timestamp or the measured story duration. Zod validates the response, tier, timeline and boundaries. The seed's publication/age assignments are editorial fixtures in the database, not a live review service or formal school certification. Future multi-variant persistence is described below.
+
+Eight source-attributed English adaptations provide two tales per tier, 32 scenes and four **editorial collection** profiles. They are abridged from identified historical collections, not invented author testimonials or certified community recordings. All narration is synthetic `STUDIO_AI`; no original microphone or reviewed dialect tracks are seeded. `prisma/content/stories.json` is a seed input only and is never imported by React. `narration.json` records boundaries measured from the bundled PCM files. Reseeding upserts catalog records and preserves user accounts, sessions and bookmarks. Unsplash scene images carry photographer/source credit; no catalog or image failure substitutes an unrelated story.
+
+### Implemented routes
+
+All paths use `/api/v1`. JSON responses have no-store headers. Public profile/catalog responses omit email and session secrets.
+
+| Method + path | Behavior |
+|---|---|
+| GET /health | Check SQLite availability. |
+| GET /catalog | Return DB stories, ordered scenes and creator profiles; no in-memory fallback. |
+| GET /stories/:storyId | Return one adapted DB Story or 404. |
+| GET /creators/:username | Return one public CreatorProfile or 404. |
+| GET /media-status?url=/media/name.wav | Check a bounded local media path; missing assets return available:false before the browser requests audio. |
+| POST /auth/otp/request | Validate email; create expiring challenge, returning challengeId, expiresAt and simulated:true. Reserved editorial addresses are rejected. |
+| POST /auth/otp/verify | Accept any six digits, atomically consume a valid challenge, create/find creator, and return CreatorSession. |
+| GET /auth/session | Resolve an unexpired bearer session from its stored hash. |
+| POST /auth/logout | Revoke the current session. |
+| PATCH /me/voice | Authorize user and persist ORIGINAL or STUDIO_AI preference; return refreshed CreatorSession. |
+| GET /bookmarks | Return current user's storyIds. |
+| PUT /bookmarks/:storyId | Authorize current user and idempotently save a valid story. |
+| DELETE /bookmarks/:storyId | Authorize current user and idempotently remove the bookmark. |
+
+The local OTP simulator deliberately does not verify email ownership and sends no email. The animated email → sending → PIN flow accepts any six-digit entry as requested. Challenges are single-use, database sessions expire, and account writes are server-scoped. `usePersistentSession` persists the simulator session in localStorage (`oralia-creator-session`), validates it against the API after reload, supports a storage-blocked current-page session, and revokes it on logout. This local presentation flow must be replaced with verified provider authentication for production.
+
+### Current state and playback ownership
+
+| State | Owner |
+|---|---|
+| Catalog loading/refresh/error/retry and DB response | useDatabaseCatalog + src/lib/api.ts; fetch AbortController and Zod validation. Existing data remains visible during refresh; unresolved public pages show CatalogStatusModal until refresh succeeds or can be retried. |
+| Shared age/mode/theme | App; theme preference only in oralia-editorial-theme. |
+| Public story/profile URL | usePublicView; shareable #stories/:id and #creators/:username, including browser history. |
+| Creator session | usePersistentSession + CreatorSessionContext; validated API/localStorage boundary. |
+| Account bookmarks | SQLite/API; useStoryBookmark owns pending/feedback. Guest IDs remain device-local. |
+| Voice Quality Safeguard | User.preferredVoiceType through PATCH /me/voice; exported as bundle.voiceType. |
+| Audio and cue state | useAudioCarousel around one HTMLAudioElement; no second accumulating playback clock. |
+| Missing audio source | usePlaybackSource + Web Audio-generated quiet WAV timing tone; stale synthesis work and blob URLs released on replacement/unmount. |
+| Caption/voice/volume controls | Local player state; only supplied English caption track selectable. Dialect overlay states when a reviewed track is absent. Original voice with no supplied recording uses an explicitly labeled tone; Studio AI selects spoken seed narration. |
+| Search/region filter | VellumFeed / EducationFeed local UI state over the same DB catalog. |
+| Recording/pitch/storyboard | CreatorStudio and useStudioRecording; drafts remain local to the mounted studio. |
+| Draft playback transport | AudioDraftPlayer reads the recording hook's HTMLAudioElement; themed play/pause, seek/time, and shared VolumeControl. Recorder containers with unknown duration become seekable after their first complete playback. |
+
+Play/pause, waveform/timeline drags, transcript cues and all four chapter cards use the same media clock. A paint-aligned loop publishes discrete cue changes; timeupdate updates progress. Decoded images crossfade and retain the previous image on a later failure; thumbnails retain the scene's readable identity. Volume Escape dismisses its panel without closing the containing reader. Public navigation unmounts the only player and stops audio. Both themes preserve rounded geometry, focus visibility and reduced motion.
+
+Studio recording has microphone-free practice and optional MediaRecorder modes. Voice preference selects the production plan and never claims to synthesize a new recording. Preview/export assemble the selected database storyboard with current edits. The real ZIP contains four images, ordered prompts/durations, source/photographer attribution and checksums. Its independent timeline does not rewrite the source narration. AI preparation and email remain explicit simulations; durable AI jobs, private exports and real delivery are future work.
+
+**Final cleanup — 6 November 2026:** PIN success updates the navbar directly from the persisted session before catalog refresh finishes. New profile links show loading/retry feedback while their database profile is fetched; avatar image failure displays initials without losing the username or accessible link. Saving a new session clears stale sign-out notices. Modal focus is captured before dialog auto-focus and restored to the trigger, or to main content if that trigger has been removed. The compact navigation also covers tablet widths through 900px. Source URL adaptation repairs two legacy Gutenberg chapter fragments (`ch01`/`ch02` to verified `ch1`/`ch2`) for existing records without rewriting SQLite; future seed inputs already carry the corrected fragments.
+
+The remaining sections describe the production target. They do not imply the queue, PostgreSQL, providers, offline PWA or signed-link email flow are already deployed.
 
 ## 1. Architecture goals
 
@@ -49,7 +107,7 @@ flowchart LR
 
 ## 3. Main processing flows
 
-### Mode 1 — Core Social Reel
+### Mode 1 — Vellum
 
 1. Storyteller records locally or uploads a completed audio file. Record MIME type, duration, file size, checksum, consent/rights choice, language hint, and dialect hint.
 2. Server creates a story job; audio uploads directly to private storage using a scoped URL.
@@ -75,13 +133,38 @@ flowchart LR
 
 ## 4. Component hierarchy
 
+### Implemented local application
+
+```text
+App (mode, age, theme; CreatorSessionContext; useDatabaseCatalog)
+├─ Navbar / DropdownSelect / account profile / sign-in or sign-out
+├─ VellumFeed → StoryCard / CreatorByline / CreatorAvatar
+├─ CreatorAccessGate or CreatorStudio (simulated persistent creator session)
+│  ├─ Voice Quality Safeguard / useStudioRecording
+│  ├─ StoryboardEditor / StoryboardPreviewModal
+│  └─ ExportModal → buildManifest / packageStoryboard
+├─ EducationFeed (shared age, local region filter, DB stories)
+└─ One public/auth modal
+   ├─ ListeningRoomModal → CarouselPlayer → useAudioCarousel
+   │  ├─ PlaybackWaveform / KeyframeTimeline / SceneThumbnail
+   │  ├─ CaptionTranscript / VolumeControl / useStoryBookmark
+   │  └─ usePlaybackSource → timing tone only when source is absent
+   ├─ CreatorProfileModal → published, author-scoped StoryCard grid
+   ├─ UnavailablePublicViewModal
+   └─ CreatorSignInModal → email / sending / six-digit PIN
+```
+
+The catalog and public profile data are server-owned. Profiles filter by exact creatorId and the shared age-eligibility helper; missing variants and unknown links show explicit unavailable states. No playback or login is mounted in discovery. Public story/profile links remain accessible to guests.
+
+### Planned production hierarchy
+
 ```text
 App
 ├─ AppShell
 │  ├─ Header / ModeSwitcher
 │  ├─ ConnectionStatus
 │  └─ RouteOutlet
-├─ CoreSocialRoute
+├─ VellumRoute
 │  ├─ RecordStoryPage
 │  │  ├─ RecorderControls
 │  │  ├─ RecordingPermissionHelp
@@ -109,7 +192,7 @@ App
 
 Shared UI must not duplicate audio synchronization logic. `SyncedCarousel` accepts a selected `StoryVariant`; it does not own the audio clock. The audio controller should survive slide changes and only be recreated when the audio asset/story changes.
 
-## 5. State management
+## 5. Planned production state management
 
 | State domain | Owner | Update pattern |
 |---|---|---|
@@ -171,7 +254,7 @@ Times are seconds from the start of the canonical audio. `imageUrl` is included 
 
 These examples are deliberately small mock records. They show all four tier keys and the distinct data each mode needs; real IDs, URLs, and transcript text come from the server pipeline.
 
-### Mode 1 — Core Social Reel
+### Mode 1 — Vellum
 
 ```json
 {
@@ -261,7 +344,7 @@ These examples are deliberately small mock records. They show all four tier keys
 }
 ```
 
-## 8. API route structure
+## 8. Planned production API route structure
 
 All routes are under `/api/v1`; request and response bodies are schema-validated, authenticated routes authorize the resource owner, and long work returns a job ID instead of holding an HTTP request open.
 

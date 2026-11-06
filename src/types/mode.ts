@@ -1,1 +1,1 @@
-export type AppMode = 'social_reel' | 'creator_studio' | 'education';
+export type AppMode = 'vellum' | 'creator_studio' | 'education';

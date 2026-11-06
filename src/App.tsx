@@ -1,37 +1,64 @@
 import { useEffect, useState } from 'react';
-import { ArrowUpRight, AudioLines, Heart, Leaf } from 'lucide-react';
+import { AudioLines, Heart } from 'lucide-react';
 import { Navbar } from './components/Navbar';
-import { CarouselPlayer } from './components/CarouselPlayer';
 import { CreatorStudio } from './components/CreatorStudio';
 import { EducationFeed } from './components/EducationFeed';
-import { demoStory } from './data/mockStories';
+import { VellumFeed } from './components/VellumFeed';
+import { ListeningRoomModal } from './components/ListeningRoomModal';
+import { CreatorProfileModal } from './components/CreatorProfileModal';
+import { CreatorSignInModal } from './components/CreatorSignInModal';
+import { CreatorAccessGate } from './components/CreatorAccessGate';
+import { UnavailablePublicViewModal } from './components/UnavailablePublicViewModal';
+import { CatalogStatusModal } from './components/CatalogStatusModal';
+import { useDatabaseCatalog } from './hooks/useDatabaseCatalog';
+import { CreatorSessionContext, usePersistentSession } from './hooks/useCreatorSession';
+import { getPlayableStories } from './lib/catalog';
+import { usePublicView } from './hooks/usePublicView';
 import type { AppMode } from './types/mode';
 import type { AgeTier } from './types/story';
 
 export default function App() {
-  const [mode, setMode] = useState<AppMode>('social_reel');
+  const [mode, setMode] = useState<AppMode>('vellum');
   const [ageTier, setAgeTier] = useState<AgeTier>('10-13');
+  const { session, save: setSession, signOut, notice: sessionNotice } = usePersistentSession();
+  const catalog = useDatabaseCatalog();
+  const stories = catalog.data?.stories ?? [];
+  const creators = catalog.data?.creators ?? [];
+  const [authOpen, setAuthOpen] = useState(false);
+  const publicView = usePublicView();
   const [theme, setTheme] = useState<'dark' | 'light'>(() => {
-    try { return localStorage.getItem('oralia-theme') === 'light' ? 'light' : 'dark'; } catch { return 'dark'; }
+    try { return localStorage.getItem('oralia-editorial-theme') === 'dark' ? 'dark' : 'light'; } catch { return 'light'; }
   });
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
-    try { localStorage.setItem('oralia-theme', theme); } catch { /* Theme remains usable when storage is unavailable. */ }
+    try { localStorage.setItem('oralia-editorial-theme', theme); } catch { /* Appearance remains usable without storage. */ }
   }, [theme]);
-  const variant = demoStory.tierVariants[ageTier];
-  return <div className="app-shell">
-    <Navbar mode={mode} onModeChange={setMode} ageTier={ageTier} onAgeTierChange={setAgeTier} theme={theme} onThemeChange={() => setTheme(value => value === 'dark' ? 'light' : 'dark')} />
+  const selectMode = (next: AppMode) => { publicView.close(); setMode(next); setAuthOpen(next === 'creator_studio' && !session); };
+  const returnToVellum = () => { setAuthOpen(false); publicView.close(); setMode('vellum'); };
+  const visibleMode = publicView.view && mode === 'creator_studio' ? 'vellum' : mode;
+  const returnFromReader = () => { setAuthOpen(false); if (mode === 'education') publicView.close(); else returnToVellum(); };
+  const requestedStory = publicView.view?.kind === 'story' ? stories.find(story => story.id === publicView.view?.key) : undefined;
+  const entry = requestedStory ? getPlayableStories([requestedStory], ageTier)[0] : undefined;
+  const template = getPlayableStories(stories, ageTier)[0]?.story;
+  const profile = publicView.view?.kind === 'creator' ? creators.find(creator => creator.username === publicView.view?.key) : undefined;
+  const missingPublicRecord = publicView.view?.kind === 'creator' ? !profile : !requestedStory;
+  const publicCatalogPending = !!publicView.view && missingPublicRecord && (catalog.pending || !!catalog.error);
+
+  return <CreatorSessionContext value={session}><div className="app-shell">
+    <Navbar mode={visibleMode} onModeChange={selectMode} ageTier={ageTier} onAgeTierChange={setAgeTier} theme={theme} onThemeChange={() => setTheme(value => value === 'dark' ? 'light' : 'dark')} session={session} onCreatorAuth={() => { if (session) { void signOut(); setAuthOpen(false); returnToVellum(); } else setAuthOpen(true); }} />
     <main id="main" tabIndex={-1} className="main-content">
-      {mode === 'social_reel' && <>
-        <div className="page-intro"><div><span className="eyebrow text-clay"><span className="tiny-line" />STORIES LIVE IN OUR VOICES</span><h1>Made to be heard.<br /><em>Imagined to be seen.</em></h1><p>Discover a world of stories. One voice, one moment at a time.</p></div><div className="intro-note"><Leaf size={25} strokeWidth={1.3} /><p>Rooted in oral tradition.<br />Reimagined for a new generation.</p></div></div>
-        <div className="feed-heading"><span><span className="status-dot" />THE LISTENING ROOM</span><span>Take a moment. Let a story find you. <ArrowUpRight size={14} /></span></div>
-        {variant && <CarouselPlayer key={`${demoStory.id}-${ageTier}`} story={demoStory} variant={variant} />}
-        <div className="invitation"><div className="invitation-icon"><MicMark /></div><div><h3>Your voice belongs here.</h3><p>A memory. A folktale. A world only you can imagine. Let's hear it.</p></div><button className="secondary-button" onClick={() => setMode('creator_studio')}>Tell your story <ArrowUpRight size={16} /></button></div>
-      </>}
-      {mode === 'creator_studio' && <CreatorStudio ageTier={ageTier} />}
-      {mode === 'education' && <EducationFeed ageTier={ageTier} onAgeTierChange={setAgeTier} story={demoStory} />}
+      {sessionNotice && <p className="notice" role="status">{sessionNotice}</p>}
+      {!catalog.data && <section className="collection-empty empty-state" role="status"><h1>{catalog.error ? 'Collection unavailable' : 'Opening the story collection…'}</h1><p>{catalog.error || 'Loading stories and profiles from the local database.'}</p>{catalog.error && <button className="secondary-button" onClick={catalog.retry}>Retry database connection</button>}</section>}
+      {catalog.data && catalog.error && <div className="catalog-refresh-notice" role="alert"><p>The latest collection could not load. {catalog.error}</p><button type="button" className="secondary-button" onClick={catalog.retry}>Retry collection refresh</button></div>}
+      {catalog.isRefreshing && <p className="helper-text catalog-refreshing" role="status">Refreshing the collection…</p>}
+      {catalog.data && visibleMode === 'vellum' && <VellumFeed stories={stories} creators={creators} ageTier={ageTier} onAgeTierChange={setAgeTier} onCreate={() => selectMode('creator_studio')} />}
+      {visibleMode === 'creator_studio' && (session ? <><p className="demo-session-banner" role="status">Creator @{session.username} · Local OTP simulation</p>{template ? <CreatorStudio ageTier={ageTier} templateStory={template} session={session} onSessionChange={setSession} /> : <p className="notice">Load the collection to open the storyboard editor.</p>}</> : <CreatorAccessGate onSignIn={() => setAuthOpen(true)} />)}
+      {catalog.data && visibleMode === 'education' && <EducationFeed ageTier={ageTier} onAgeTierChange={setAgeTier} stories={stories} />}
     </main>
     <footer className="site-footer"><span><AudioLines size={16} />oralia. <span>Every voice carries a world.</span></span><span>Built with care <Heart size={11} /> Andela × OpenAI Codex Accelerator</span></footer>
-  </div>;
+    {publicCatalogPending && publicView.view && <CatalogStatusModal resource={publicView.view.kind} pending={catalog.pending} error={catalog.error} onRetry={catalog.retry} onClose={returnToVellum} />}
+    {catalog.data && !publicCatalogPending && publicView.view?.kind === 'story' && (entry ? <ListeningRoomModal key={`${entry.story.id}-${ageTier}`} story={entry.story} variant={entry.variant} creator={creators.find(creator => creator.id === entry.story.creatorId)} returnLabel={mode === 'education' ? 'Back to Education' : 'Back to Vellum feed'} onClose={returnFromReader} /> : <UnavailablePublicViewModal ageTier={ageTier} canChangeAge={!!requestedStory} onAgeTierChange={setAgeTier} onClose={returnToVellum} />)}
+    {catalog.data && !publicCatalogPending && publicView.view?.kind === 'creator' && (profile ? <CreatorProfileModal key={profile.id} creator={profile} stories={stories} ageTier={ageTier} onAgeTierChange={setAgeTier} onClose={returnToVellum} /> : <UnavailablePublicViewModal ageTier={ageTier} canChangeAge={false} onAgeTierChange={setAgeTier} onClose={returnToVellum} />)}
+    {authOpen && !publicView.view && <CreatorSignInModal onClose={() => setAuthOpen(false)} onSignIn={next => { setSession(next); catalog.retry(); setAuthOpen(false); setMode('creator_studio'); }} />}
+  </div></CreatorSessionContext>;
 }
-function MicMark() { return <AudioLines size={26} strokeWidth={1.5} />; }

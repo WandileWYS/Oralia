@@ -1,0 +1,250 @@
+[
+  {
+    "syntheticVoice": "Microsoft Zira Desktop",
+    "cues": [
+      {
+        "caption": "In Fante country, Anansi gathered wisdom into a pot. Offended by his neighbors, he planned to keep it from them.",
+        "startTime": 0.0,
+        "endTime": 8.358095238095238,
+        "title": "Wisdom in a pot"
+      },
+      {
+        "caption": "He carried the pot against his chest and tried to climb a tall tree. The pot kept getting in his way.",
+        "startTime": 8.358095238095238,
+        "endTime": 15.096507936507937,
+        "title": "The difficult climb"
+      },
+      {
+        "caption": "His son Kweku Tsin watched below. Why not carry it on your back, the boy suggested. Anansi stopped climbing.",
+        "startTime": 15.096507936507937,
+        "endTime": 24.0097052154195,
+        "title": "Kweku Tsin's advice"
+      },
+      {
+        "caption": "If all wisdom was inside his pot, how could his son know better? Anansi dropped the pot, scattering wisdom abroad.",
+        "startTime": 24.0097052154195,
+        "endTime": 32.44789115646258,
+        "title": "No one knows everything"
+      }
+    ],
+    "durationSeconds": 32.44789115646258,
+    "id": "anansi-wisdom"
+  },
+  {
+    "syntheticVoice": "Microsoft Hazel Desktop",
+    "cues": [
+      {
+        "caption": "The birds wanted a king. They argued about size, strength, and beauty, before choosing a contest of height.",
+        "startTime": 0.0,
+        "endTime": 9.387074829931972,
+        "title": "The birds assemble"
+      },
+      {
+        "caption": "Vulture climbed toward the sun. Tiny Tink-tinkje rode unnoticed among his feathers, saving the strength of his own wings.",
+        "startTime": 9.387074829931972,
+        "endTime": 18.839002267573697,
+        "title": "Under Vulture's wing"
+      },
+      {
+        "caption": "Whenever Vulture claimed the crown, the little bird flew just above him. His small voice declared that he was higher.",
+        "startTime": 18.839002267573697,
+        "endTime": 27.796009070294783,
+        "title": "A voice from above"
+      },
+      {
+        "caption": "Angry birds chased the trickster into a hole. Owl guarded it, but fell asleep, and Tink-tinkje slipped away.",
+        "startTime": 27.796009070294783,
+        "endTime": 36.253015873015876,
+        "title": "The sleeping guard"
+      }
+    ],
+    "durationSeconds": 36.253015873015876,
+    "id": "tink-tinkje"
+  },
+  {
+    "syntheticVoice": "Microsoft Zira Desktop",
+    "cues": [
+      {
+        "caption": "Stories belonged to Nyankupon. Anansi asked to name them after himself. First, he must deliver bees, a great snake, and a tiger.",
+        "startTime": 0.0,
+        "endTime": 11.297777777777778,
+        "title": "Nyankupon's bargain"
+      },
+      {
+        "caption": "Anansi argued aloud that the bees could not fill his jar. They flew inside to prove him wrong, and he sealed it.",
+        "startTime": 11.297777777777778,
+        "endTime": 19.085986394557825,
+        "title": "The jar of bees"
+      },
+      {
+        "caption": "He challenged the snake to match a stick, then bound it in place. Another deception helped him lead away the tiger.",
+        "startTime": 19.085986394557825,
+        "endTime": 26.858956916099775,
+        "title": "Measuring the snake"
+      },
+      {
+        "caption": "Nyankupon saw that Anansi had fulfilled the bargain. The old stories could now bear the spider's name.",
+        "startTime": 26.858956916099775,
+        "endTime": 34.23718820861678,
+        "title": "A name for the tales"
+      }
+    ],
+    "durationSeconds": 34.23718820861678,
+    "id": "anansi-spider-tales"
+  },
+  {
+    "syntheticVoice": "Microsoft George",
+    "cues": [
+      {
+        "caption": "A monkey shared fruit from a coastal fig tree with a shark. Their friendship lasted through many visits.",
+        "startTime": 0.0,
+        "endTime": 6.803219954648526,
+        "title": "Fruit above the sea"
+      },
+      {
+        "caption": "The shark offered a journey home on his back. Halfway there, he admitted his ruler wanted the monkey's heart.",
+        "startTime": 6.803219954648526,
+        "endTime": 13.846530612244898,
+        "title": "An invitation underwater"
+      },
+      {
+        "caption": "The monkey said he had left his heart in the tree. Believing him, the shark turned toward the shore.",
+        "startTime": 13.846530612244898,
+        "endTime": 20.429750566893425,
+        "title": "A quick answer"
+      },
+      {
+        "caption": "The monkey climbed to safety and refused another journey. He would not mistake a dangerous invitation for friendship again.",
+        "startTime": 20.429750566893425,
+        "endTime": 28.16761904761905,
+        "title": "Safely among the branches"
+      }
+    ],
+    "durationSeconds": 28.16761904761905,
+    "id": "monkey-and-shark"
+  },
+  {
+    "syntheticVoice": "Microsoft Hazel Desktop",
+    "cues": [
+      {
+        "caption": "In this recorded Zulu telling, the creator sends Chameleon to tell human beings that they will not die.",
+        "startTime": 0.0,
+        "endTime": 7.182176870748299,
+        "title": "The first message"
+      },
+      {
+        "caption": "Chameleon travels slowly, stopping to feed along the way. The hopeful message has still not reached the people.",
+        "startTime": 7.182176870748299,
+        "endTime": 15.898956916099774,
+        "title": "Along the road"
+      },
+      {
+        "caption": "A second messenger, called Salamander in this translation, is sent with a different message: human beings must die.",
+        "startTime": 15.898956916099774,
+        "endTime": 24.63578231292517,
+        "title": "The faster messenger"
+      },
+      {
+        "caption": "The faster messenger arrives first. The tale holds mortality and lost possibility within the distance between two journeys.",
+        "startTime": 24.63578231292517,
+        "endTime": 34.41242630385487,
+        "title": "The message that arrived"
+      }
+    ],
+    "durationSeconds": 34.41242630385487,
+    "id": "two-messengers"
+  },
+  {
+    "syntheticVoice": "Microsoft George",
+    "cues": [
+      {
+        "caption": "In the monkey's tale, Hare persuades a washerman's donkey to visit Lion. An attractive promise conceals an ambush.",
+        "startTime": 0.0,
+        "endTime": 7.428072562358277,
+        "title": "A promise from Hare"
+      },
+      {
+        "caption": "Lion's first attack fails, and the donkey escapes. Hare returns with reassurance, asking the donkey to believe him again.",
+        "startTime": 7.428072562358277,
+        "endTime": 15.6459410430839,
+        "title": "The first escape"
+      },
+      {
+        "caption": "The donkey returns and does not survive. Later, Hare takes the heart and ears that Lion had reserved for himself.",
+        "startTime": 15.6459410430839,
+        "endTime": 23.234240362811793,
+        "title": "The second visit"
+      },
+      {
+        "caption": "Hare argues that a creature with judgment would never have returned. The monkey finishes his warning and rejects the shark.",
+        "startTime": 23.234240362811793,
+        "endTime": 30.572199546485262,
+        "title": "A dangerous excuse"
+      }
+    ],
+    "durationSeconds": 30.572199546485262,
+    "id": "washermans-donkey"
+  },
+  {
+    "syntheticVoice": "Microsoft George",
+    "cues": [
+      {
+        "caption": "Goso teaches children beneath a calabash tree. A gazelle dislodges a fruit, which falls and kills the teacher.",
+        "startTime": 0.0,
+        "endTime": 7.263174603174603,
+        "title": "Beneath the calabash tree"
+      },
+      {
+        "caption": "His pupils seek someone to punish. They accuse the south wind, then the wall that stops it, then the rat.",
+        "startTime": 7.263174603174603,
+        "endTime": 14.77641723356009,
+        "title": "The search for a cause"
+      },
+      {
+        "caption": "Each accused points toward another power: cat, rope, knife, fire, water, ox, and tick. The chain finally returns to gazelle.",
+        "startTime": 14.77641723356009,
+        "endTime": 24.514557823129252,
+        "title": "A circle of explanations"
+      },
+      {
+        "caption": "Unable to redirect the accusation, the gazelle is killed. The circular tale leaves the pupils' certainty beside their continuing loss.",
+        "startTime": 24.514557823129252,
+        "endTime": 33.21229024943311,
+        "title": "The cost of certainty"
+      }
+    ],
+    "durationSeconds": 33.21229024943311,
+    "id": "goso-the-teacher"
+  },
+  {
+    "syntheticVoice": "Microsoft George",
+    "cues": [
+      {
+        "caption": "Sultan Majnun tends a rich garden, yet a mysterious bird repeatedly eats the ripe dates before he can taste them.",
+        "startTime": 0.0,
+        "endTime": 6.892879818594104,
+        "title": "The guarded garden"
+      },
+      {
+        "caption": "His older sons fail at keeping watch. The youngest asks for a turn, though his father doubts he will succeed.",
+        "startTime": 6.892879818594104,
+        "endTime": 14.295963718820861,
+        "title": "The youngest volunteer"
+      },
+      {
+        "caption": "The young watcher stays awake and seizes the bird's wing. It carries him high above the garden, urging him to let go.",
+        "startTime": 14.295963718820861,
+        "endTime": 21.694104308390024,
+        "title": "Wings above the palm"
+      },
+      {
+        "caption": "He refuses to release it. The bird brings him safely down, beginning the bargain that carries the longer story onward.",
+        "startTime": 21.694104308390024,
+        "endTime": 29.467165532879818,
+        "title": "Returning to the ground"
+      }
+    ],
+    "durationSeconds": 29.467165532879818,
+    "id": "sultan-majnuns-date-palm"
+  }
+]

@@ -6,3 +6,5 @@ dist/
 !.env.example
 *.tsbuildinfo
 .qa/
+server/generated/
+prisma/*.db*

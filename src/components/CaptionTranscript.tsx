@@ -2,9 +2,13 @@ import { useEffect, useRef } from 'react';
 import { Languages, ScrollText } from 'lucide-react';
 import type { Keyframe } from '../types/story';
 import { cn, formatTime } from '../lib/utils';
+import { DropdownSelect, type DropdownOption } from './DropdownSelect';
 
-export const captionLanguages = { en: 'English', zu: 'isiZulu', sw: 'Swahili' } as const;
+export const captionLanguages = { en: 'English' } as const;
 export type CaptionLanguage = keyof typeof captionLanguages;
+const languageOptions: readonly DropdownOption<CaptionLanguage>[] = [
+  { value: 'en', label: 'English' },
+];
 
 interface Props {
   frames: readonly Keyframe[];
@@ -28,8 +32,8 @@ export function CaptionTranscript({ frames, activeIndex, language, overlay, onLa
   }, [activeIndex, language]);
 
   return <section className="transcript-panel" aria-label="Synchronized transcript">
-    <div className="transcript-toolbar"><span><ScrollText size={16} />Read along <i>Auto-scroll</i></span><div className="caption-settings"><label><Languages size={15} /><span className="sr-only">Caption language</span><select aria-label="Caption language" value={language} onChange={event => onLanguageChange(event.target.value as CaptionLanguage)}>{Object.entries(captionLanguages).map(([code, label]) => <option key={code} value={code}>{label}{code !== 'en' ? ' · placeholder' : ''}</option>)}</select></label><button onClick={onOverlayChange} aria-pressed={overlay} className={cn('overlay-toggle', overlay && 'active')}>Dialect overlay <span /></button></div></div>
-    {language !== 'en' && <p className="translation-notice">{captionLanguages[language]} is a synchronized placeholder. Reviewed translation is pending; original English text is preserved.</p>}
-    <div className="transcript-scroll" ref={pane} tabIndex={0} aria-label="Scrollable caption cues">{frames.map((frame, index) => <button key={frame.id} className={cn('transcript-cue', activeIndex === index && 'active')} aria-current={activeIndex === index ? 'true' : undefined} disabled={!canSeek} onClick={() => onSeek(frame.startTime)}><time>{formatTime(frame.startTime)}</time><span>{language !== 'en' && <small>{captionLanguages[language]} placeholder · scene {index + 1}</small>}{frame.caption}</span></button>)}</div>
+    <div className="transcript-toolbar"><span><ScrollText size={16} />Read along <i>Auto-scroll</i></span><div className="caption-settings"><DropdownSelect className="caption-dropdown" label="Caption language" icon={<Languages size={15} />} value={language} options={languageOptions} onChange={onLanguageChange} /><button onClick={onOverlayChange} aria-pressed={overlay} className={cn('overlay-toggle', overlay && 'active')}>Dialect overlay <span /></button></div></div>
+    {overlay && <p className="translation-notice">English adaptation captions. No reviewed dialect track is supplied for this collection.</p>}
+    <div className="transcript-scroll" ref={pane} tabIndex={0} aria-label="Scrollable caption cues">{frames.map((frame, index) => <button key={frame.id} className={cn('transcript-cue', activeIndex === index && 'active')} aria-current={activeIndex === index ? 'true' : undefined} disabled={!canSeek} onClick={() => onSeek(frame.startTime)}><time>{formatTime(frame.startTime)}</time><span>{frame.caption}</span></button>)}</div>
   </section>;
 }
