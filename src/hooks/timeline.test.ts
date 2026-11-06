@@ -26,13 +26,4 @@ test('rejects invalid, overlapping, and unsorted cue timelines', () => {
   assert.equal(timelineSchema.safeParse([{ ...frames[0], startTime: -1 }]).success, false);
   assert.equal(timelineSchema.safeParse([frames[0], { ...frames[1], startTime: 4 }]).success, false);
 });
-test('story variants match their tier and fit the canonical audio', () => {
-  const record = {
-    id: 'story', title: 'Story', description: '', creator: 'Demo', category: 'Fiction',
-    audio: { id: 'audio', url: '/demo.wav', mimeType: 'audio/wav', durationSeconds: 18, language: 'en', dialect: null },
-    tierVariants: { '5-9': { ageTier: '5-9', stylePreset: 'fairytale', styleLabel: 'Fairytale', contentRating: 'gentle', reviewStatus: 'approved', keyframes: frames } },
-  };
-  assert.equal(storySchema.safeParse(record).success, true);
-  assert.equal(storySchema.safeParse({ ...record, audio: { ...record.audio, durationSeconds: 10 } }).success, false);
-  assert.equal(storySchema.safeParse({ ...record, tierVariants: { '5-9': { ...record.tierVariants['5-9'], ageTier: '18+' } } }).success, false);
-});
+test('single presentations fit the canonical audio and reject ALL as a stored collection',()=>{const record={id:'s',title:'Story',description:'',creator:'Author',collection:'FOLK_AND_FABLE',category:'Fable',audio:{id:'a',url:'/a.wav',mimeType:'audio/wav',durationSeconds:18,language:'en',dialect:null},presentation:{stylePreset:'fable',styleLabel:'Fable',reviewStatus:'approved',keyframes:frames}};assert.equal(storySchema.safeParse(record).success,true);assert.equal(storySchema.safeParse({...record,collection:'ALL'}).success,false);assert.equal(storySchema.safeParse({...record,audio:{...record.audio,durationSeconds:10}}).success,false);});

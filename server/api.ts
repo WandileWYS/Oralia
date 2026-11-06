@@ -1,11 +1,14 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { randomBytes, createHash } from 'node:crypto';
-import { stat } from 'node:fs/promises';
-import { resolve, sep } from 'node:path';
 import { z } from 'zod';
 import { db } from './db.ts';
 import { readCatalog } from './catalog.ts';
+import { storyCollectionSchema } from '../src/types/story.ts';
 import { creatorEmailSchema } from '../src/types/creator.ts';
+import { bundledMedia } from './mediaManifest.ts';
+import { presentationMode } from './environment.ts';
+import { keyframeImageRequestSchema, keyframeImageResponseSchema } from '../src/types/images.ts';
+import { fallbackImage } from './images.ts';
 
 class HttpError extends Error { status: number; constructor(status: number, message: string) { super(message); this.status = status; } }
 function send(response: ServerResponse, status: number, value: unknown) {
@@ -13,6 +16,13 @@ function send(response: ServerResponse, status: number, value: unknown) {
   response.end(JSON.stringify(value));
 }
 async function body(request: IncomingMessage): Promise<unknown> {
+  // Vercel's Node helpers may have consumed the stream and parsed JSON already.
+  const parsed: unknown = (request as IncomingMessage & { body?: unknown }).body;
+  if (parsed !== undefined) {
+    const text = typeof parsed === 'string' ? parsed : Buffer.isBuffer(parsed) ? parsed.toString('utf8') : JSON.stringify(parsed);
+    if (Buffer.byteLength(text) > 24576) throw new HttpError(413, 'Request is too large.');
+    try { return JSON.parse(text); } catch { throw new HttpError(400, 'Send valid JSON.'); }
+  }
   let text = '';
   for await (const chunk of request) {
     text += String(chunk);
@@ -36,9 +46,10 @@ export async function handleApi(request: IncomingMessage, response: ServerRespon
     const url = new URL(request.url || '/', 'http://localhost');
     const route = url.pathname.replace(/^\/api\/v1/, '');
     const method = request.method;
+    if (!url.pathname.startsWith('/api/v1/')) throw new HttpError(404, 'API route not found.');
     if (method !== 'GET' && request.headers.origin && new URL(request.headers.origin).host !== request.headers.host) throw new HttpError(403, 'Use this application’s origin.');
     if (method === 'GET' && route === '/health') { await db.story.count(); return send(response, 200, { ok: true }); }
-    if (method === 'GET' && route === '/catalog') return send(response, 200, await readCatalog());
+    if (method === 'GET' && route === '/catalog') { const value = url.searchParams.get('collection'); return send(response, 200, await readCatalog(value === null ? undefined : storyCollectionSchema.parse(value))); }
     if (method === 'GET' && (route.startsWith('/stories/') || route.startsWith('/creators/'))) {
       const data = await readCatalog();
       const key = decodeURIComponent(route.split('/')[2]);
@@ -47,22 +58,24 @@ export async function handleApi(request: IncomingMessage, response: ServerRespon
       return send(response, 200, value);
     }
     if (method === 'GET' && route === '/media-status') {
-      const mediaRoot = resolve('public/media');
       const input = url.searchParams.get('url') || '';
-      const target = resolve('public', `.${input}`);
-      let available = false;
-      if (input.startsWith('/media/') && target.startsWith(mediaRoot + sep)) {
-        try { available = (await stat(target)).isFile(); } catch { /* Missing media is reported as data, not an audio request failure. */ }
-      }
-      return send(response, 200, { available });
+      return send(response, 200, { available: bundledMedia.has(input) });
+    }
+    if (method === 'POST' && route === '/images/keyframe') {
+      await authorized(request);
+      const input = keyframeImageRequestSchema.parse(await body(request));
+      // Every existing session is simulated. It can never authorize paid generation.
+      return send(response, 200, keyframeImageResponseSchema.parse(fallbackImage(input)));
     }
     if (method === 'POST' && route === '/auth/otp/request') {
+      if (!presentationMode()) throw new HttpError(403, 'Presentation sign-in is disabled.');
       const { email } = z.object({ email: creatorEmailSchema }).parse(await body(request));
       if (email.endsWith('@collections.oralia.invalid')) throw new HttpError(409, 'Collection addresses are reserved. Use your own creator email.');
       const record = await db.otpChallenge.create({ data: { email, expiresAt: new Date(Date.now() + 5 * 60000) } });
       return send(response, 200, { challengeId: record.id, expiresAt: record.expiresAt.toISOString(), simulated: true });
     }
     if (method === 'POST' && route === '/auth/otp/verify') {
+      if (!presentationMode()) throw new HttpError(403, 'Presentation sign-in is disabled.');
       const { challengeId, pin } = z.object({ challengeId: z.string(), pin: z.string().regex(/^\d{6}$/) }).parse(await body(request));
       void pin; // The requested local simulator accepts every six-digit PIN.
       const token = randomBytes(32).toString('hex');

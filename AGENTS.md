@@ -1,6 +1,6 @@
 # Oralia Agent & Contributor Rules
 
-These rules apply to implementation work in this project. The local application uses a React/Vite client and a TypeScript `/api/v1` API backed by Prisma and SQLite. Use npm and the committed package-lock.json.
+These rules apply to implementation work in this project. The local application uses a React/Vite client and a TypeScript `/api/v1` API backed by Prisma with Turso for hosting and SQLite for isolated local work. Use npm and the committed package-lock.json.
 
 ## Required stack
 
@@ -16,7 +16,7 @@ These rules apply to implementation work in this project. The local application 
 
 - Keep UI components, domain logic, API clients, and provider adapters in separate modules. Components should not call vendors directly.
 - Use a typed, versioned `/api/v1` client. Keep HTTP parsing, error mapping, and retry policy in the client/data layer.
-- SQLite (`prisma/oralia.db`) is the current source of truth for feed stories, profiles, keyframes, creator sessions, voice preferences, and account bookmarks. `useDatabaseCatalog` owns catalog loading/error/retry state; do not silently substitute fixtures after a failed API request. `src/data/presentation.ts` contains only visual tier presets.
+- The configured database (Turso in hosting; explicit local SQLite for tests/development) is the source of truth for feed stories, profiles, keyframes, creator sessions, voice preferences, and account bookmarks. `useDatabaseCatalog` owns catalog loading/error/retry state; do not silently substitute fixtures after a failed API request. `src/data/presentation.ts` contains only collection style presets.
 - Treat server data as server-owned state (TanStack Query or an approved equivalent). Keep UI preferences local or in a small UI store. Do not mirror every server object into a global store.
 - Place long-running work in durable server jobs. Every job must have explicit states, safe retries, idempotency behavior, progress reporting, and recoverable error summaries.
 - Use private object storage for source recordings and exports. Store references/checksums/metadata in the database, not Base64 blobs. Keep secrets out of the browser bundle, URLs, logs, analytics, and committed files.
@@ -32,16 +32,16 @@ These rules apply to implementation work in this project. The local application 
 - Avoid auto-playing sound. Preserve captions/transcript, keyboard controls, focus visibility, descriptive alt text, and reduced-motion preferences.
 - `usePlaybackSource` checks media availability before requesting a local audio file. Missing audio uses a quiet Web Audio-generated timing track through the same audio element; explicitly identify it as a tone, never narration. Switching sources cancels stale synthesis work and releases blob URLs. Keep original-voice availability distinct from the `STUDIO_AI` seed narration.
 
-## Age tiers, content, and cultural context
+## Literary collections, review, and cultural context
 
-- Use only these canonical keys: `5-9`, `10-13`, `14-17`, `18+`.
-- Keep `contentRating`, review status, tier-specific narration, visual style, subtitles, and keyframes as distinct fields. A style prompt does not establish age suitability.
-- Do not serve a tier variant until it has the required review/approval state. If a requested tier variant is missing, return a clear unavailable state instead of substituting another tier.
-- Use `getPlayableStories` for shared catalog/education eligibility. Scope creator profiles by explicit `Story.creatorId` and published metadata, never display-name similarity. Chapter labels, quotes, captions, and narration must belong to the selected story; do not reuse another story’s spoken track under a different title.
-- Keep source transcript, dialect metadata, normalized text, translation, and editorial corrections separate. Do not silently “correct” a storyteller's original wording.
-- Do not invent pan-African visual details. Use supplied region/community/period context, record attribution/rights/consent, and route culturally uncertain assets for editorial review.
-- Seed only source-attributed adaptations from `prisma/content/stories.json`, with matching measured narration in `prisma/content/narration.json`. The eight abridged English tales are historical-collection adaptations, not community-certified recordings. Seed voices are `STUDIO_AI`; no original microphone or reviewed dialect tracks are supplied. Do not fabricate original voices or translations. Age tiers are editorial seed assignments, not a formal school content certification.
-- Treat transcripts, prompts, model outputs, image URLs, filenames, and uploaded media as untrusted input. Validate, moderate, and authorize before display/publication. Human review is required for flagged or uncertain school-feed content.
+- Use only StoryCollection keys FOLK_AND_FABLE and EPIC_AND_CHRONICLE. ALL belongs only to CollectionFilter browsing state; never store or export it as a story collection.
+- A Story has one presentation containing review status, style and keyframes. Collection describes literary character, not audience suitability. Keep review gating independent of style.
+- Use getPlayableStories and getCreatorStories for consistent collection filtering and explicit creator ownership. Direct public story links resolve independently of the active browse filter.
+- Keep RegionTag and RegionFilter independent of literary collections. Never infer provenance from a title, photograph, or collection name.
+- Preserve original narration, source/dialect metadata, measured cues, attribution and cultural context. Do not invent translations or community endorsements.
+- Seeds contain six Folk & Fable stories and two Epic & Chronicle stories, each with four scenes. Narration is STUDIO_AI, not a supplied original microphone recording.
+- Require editorial review for uncertain or flagged material. A literary label does not certify school suitability.
+- Preserve immutable migration SQL. Legacy categorization references may exist only there for safe data conversion; active code, tests, docs and skills use the thematic contract.
 
 ## Offline, storage, and exports
 
@@ -56,7 +56,7 @@ These rules apply to implementation work in this project. The local application 
 
 - Keep functions small, names domain-specific, and error states explicit. Avoid hidden global mutable state outside the media controller and approved stores.
 - Prefer accessible semantic HTML over clickable generic containers. Every icon-only control needs an accessible name.
-- Use the shared CSS theme variables for surfaces, text, borders, and accents. Keep tier-specific theme colors scoped and set text color at each theme boundary. Respect reduced motion and preserve keyboard navigation and native dialog focus behavior.
+- Use the shared CSS theme variables for surfaces, text, borders, and accents. Keep collection-specific theme colors scoped and set text color at each theme boundary. Respect reduced motion and preserve keyboard navigation and native dialog focus behavior.
 - Use `--radius-pill` for compact controls, `--radius-control` (16px) for fields, and curved card containers of at least 16px. Preserve the static ambient background and readable surface colors across themes. Use `NeuralButton` for AI workflow actions so idle, busy, disabled, and reduced-motion treatments stay consistent; keep simulation labels accurate.
 - Use `DropdownSelect` for single-choice UI selectors rather than native `select`/`option` popups. Keep controlled values in their existing owner, and preserve combobox/listbox semantics, arrow/Home/End/typeahead navigation, Escape/Tab/outside dismissal, and menu positioning within clipped player/reader containers.
 - Use `AudioDraftPlayer` for themed studio playback around the recording hook's existing audio ref. Keep controls synchronized with media events; do not add native audio control bars or an independent playback timer. Header identity derives from the persisted session and retains an initials fallback. Catalog refresh failures must expose retry feedback; unresolved profile links must not be declared missing while a refresh is pending.
@@ -68,3 +68,10 @@ These rules apply to implementation work in this project. The local application 
 - Keep comments focused on non-obvious decisions; update documentation when a data contract, state transition, or provider boundary changes.
 - Add focused automated coverage for new business rules and boundary cases when implementation work is requested. Do not claim a behavior is verified unless it was actually checked.
 - Do not introduce implementation code while the task is limited to research/planning. Record unresolved infrastructure/model choices as decisions instead of guessing credentials, limits, or service configuration.
+
+## Hosting and provider preparation
+
+- Keep Turso credentials server-only and ignored. Runtime/seed resolve TURSO_DATABASE_URL plus TURSO_AUTH_TOKEN; explicit file DATABASE_URL wins only outside Vercel. Prisma CLI schema operations stay local. Never run tests against cloud merely because .env contains cloud credentials.
+- api/[...path].ts and Vite middleware share handleApi. Preserve raw request bodies, /api/v1 paths and origin checks. Generate Prisma/mediaManifest before checks; use the manifest for media availability, never runtime stat of public files. Builds must not contact a database.
+- Cloud schema initialization is explicit, atomic, checksum-recorded and rejects unexpected schemas. No resets, automatic destructive updates, migration or seed on build/request. Read-only cloud verification is separate from isolated test writes.
+- PRESENTATION_MODE=true explicitly enables simulated PIN sign-in. Every current session is simulated and must never authorize paid image calls. The images endpoint returns truthful bundled placeholders; keep provider calls, secrets and raw errors out of client bundles. Real generation/storage and verified auth remain deferred.

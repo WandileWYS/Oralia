@@ -1,42 +1,242 @@
 [
- {"id":"anansi-wisdom","title":"Anansi and the pot of wisdom","description":"A hidden pot, a tall tree, and a son's advice unsettle Anansi's claim to know everything.","ageTier":"5-9","regionTag":"west-africa","authorId":"akan-collection","voice":"Microsoft Zira Desktop","sourceTitle":"Barker and Sinclair, West African Folk-Tales (1917), II","sourceUrl":"https://www.gutenberg.org/files/66923/66923-h/66923-h.htm#ch2","culturalNote":"Abridged English adaptation of the collected Fante tale; not an original-language recording.","scenes":[
- {"title":"Wisdom in a pot","text":"In Fante country, Anansi gathered wisdom into a pot. Offended by his neighbors, he planned to keep it from them."},
- {"title":"The difficult climb","text":"He carried the pot against his chest and tried to climb a tall tree. The pot kept getting in his way."},
- {"title":"Kweku Tsin's advice","text":"His son Kweku Tsin watched below. Why not carry it on your back, the boy suggested. Anansi stopped climbing."},
- {"title":"No one knows everything","text":"If all wisdom was inside his pot, how could his son know better? Anansi dropped the pot, scattering wisdom abroad."}]},
- {"id":"tink-tinkje","title":"Tink-tinkje and the highest flight","description":"A tiny bird finds an unexpected way to rise above the strongest wings.","ageTier":"5-9","regionTag":"southern-africa","authorId":"southern-collection","voice":"Microsoft Hazel Desktop","sourceTitle":"James A. Honey, South-African Folk-Tales (1910), Tink-tinkje","sourceUrl":"https://www.gutenberg.org/cache/epub/38339/pg38339-images.html","culturalNote":"Abridged southern African animal tale; this source does not identify it specifically as Zulu.","scenes":[
- {"title":"The birds assemble","text":"The birds wanted a king. They argued about size, strength, and beauty, before choosing a contest of height."},
- {"title":"Under Vulture's wing","text":"Vulture climbed toward the sun. Tiny Tink-tinkje rode unnoticed among his feathers, saving the strength of his own wings."},
- {"title":"A voice from above","text":"Whenever Vulture claimed the crown, the little bird flew just above him. His small voice declared that he was higher."},
- {"title":"The sleeping guard","text":"Angry birds chased the trickster into a hole. Owl guarded it, but fell asleep, and Tink-tinkje slipped away."}]},
- {"id":"anansi-spider-tales","title":"How stories became Anansi tales","description":"Anansi bargains with Nyankupon for the right to give stories his name.","ageTier":"10-13","regionTag":"west-africa","authorId":"akan-collection","voice":"Microsoft Zira Desktop","sourceTitle":"Barker and Sinclair, West African Folk-Tales (1917), I","sourceUrl":"https://www.gutenberg.org/files/66923/66923-h/66923-h.htm#ch1","culturalNote":"Condensed adaptation of this collected version; animal names and episodes vary across tellings.","scenes":[
- {"title":"Nyankupon's bargain","text":"Stories belonged to Nyankupon. Anansi asked to name them after himself. First, he must deliver bees, a great snake, and a tiger."},
- {"title":"The jar of bees","text":"Anansi argued aloud that the bees could not fill his jar. They flew inside to prove him wrong, and he sealed it."},
- {"title":"Measuring the snake","text":"He challenged the snake to match a stick, then bound it in place. Another deception helped him lead away the tiger."},
- {"title":"A name for the tales","text":"Nyankupon saw that Anansi had fulfilled the bargain. The old stories could now bear the spider's name."}]},
- {"id":"monkey-and-shark","title":"The monkey and the shark","description":"A friendship beneath a coastal fig tree changes during a dangerous journey across the water.","ageTier":"10-13","regionTag":"east-africa","authorId":"swahili-collection","voice":"Microsoft George","sourceTitle":"Edward Steere, Swahili Tales (1870), opening of The Washerman's Donkey","sourceUrl":"https://en.wikisource.org/wiki/Swahili_Tales/The_Story_of_the_Washerman%27s_Donkey","culturalNote":"Abridged Zanzibar Swahili framing tale in English; the threat is described without graphic detail.","scenes":[
- {"title":"Fruit above the sea","text":"A monkey shared fruit from a coastal fig tree with a shark. Their friendship lasted through many visits."},
- {"title":"An invitation underwater","text":"The shark offered a journey home on his back. Halfway there, he admitted his ruler wanted the monkey's heart."},
- {"title":"A quick answer","text":"The monkey said he had left his heart in the tree. Believing him, the shark turned toward the shore."},
- {"title":"Safely among the branches","text":"The monkey climbed to safety and refused another journey. He would not mistake a dangerous invitation for friendship again."}]},
- {"id":"two-messengers","title":"The chameleon and the second messenger","description":"Two messages about mortality travel at different speeds in a recorded Zulu origin narrative.","ageTier":"14-17","regionTag":"zulu","authorId":"zulu-collection","voice":"Microsoft Hazel Desktop","sourceTitle":"James A. Honey, South-African Folk-Tales (1910), A Zulu Version of the Origin of Death","sourceUrl":"https://www.gutenberg.org/cache/epub/38339/pg38339-images.html","culturalNote":"Retells a historical English rendering of a Zulu origin narrative; not a statement of shared contemporary belief.","scenes":[
- {"title":"The first message","text":"In this recorded Zulu telling, the creator sends Chameleon to tell human beings that they will not die."},
- {"title":"Along the road","text":"Chameleon travels slowly, stopping to feed along the way. The hopeful message has still not reached the people."},
- {"title":"The faster messenger","text":"A second messenger, called Salamander in this translation, is sent with a different message: human beings must die."},
- {"title":"The message that arrived","text":"The faster messenger arrives first. The tale holds mortality and lost possibility within the distance between two journeys."}]},
- {"id":"washermans-donkey","title":"The washerman's donkey","description":"The monkey's cautionary tale asks why a warning sometimes fails to prevent a second mistake.","ageTier":"14-17","regionTag":"east-africa","authorId":"swahili-collection","voice":"Microsoft George","sourceTitle":"Edward Steere, Swahili Tales (1870), The Story of the Washerman's Donkey","sourceUrl":"https://en.wikisource.org/wiki/Swahili_Tales/The_Story_of_the_Washerman%27s_Donkey","culturalNote":"Abridged cautionary fable; includes animal death without graphic description.","scenes":[
- {"title":"A promise from Hare","text":"In the monkey's tale, Hare persuades a washerman's donkey to visit Lion. An attractive promise conceals an ambush."},
- {"title":"The first escape","text":"Lion's first attack fails, and the donkey escapes. Hare returns with reassurance, asking the donkey to believe him again."},
- {"title":"The second visit","text":"The donkey returns and does not survive. Later, Hare takes the heart and ears that Lion had reserved for himself."},
- {"title":"A dangerous excuse","text":"Hare argues that a creature with judgment would never have returned. The monkey finishes his warning and rejects the shark."}]},
- {"id":"goso-the-teacher","title":"Goso and the chain of blame","description":"Grieving pupils follow a circular explanation through wind, walls, animals, and human certainty.","ageTier":"18+","regionTag":"east-africa","authorId":"swahili-collection","voice":"Microsoft George","sourceTitle":"Edward Steere, Swahili Tales (1870), Goso the Teacher","sourceUrl":"https://en.wikisource.org/wiki/Swahili_Tales/Goso_the_Teacher","culturalNote":"Condensed adult adaptation about death, retaliatory violence, and circular blame; historical collection context retained.","scenes":[
- {"title":"Beneath the calabash tree","text":"Goso teaches children beneath a calabash tree. A gazelle dislodges a fruit, which falls and kills the teacher."},
- {"title":"The search for a cause","text":"His pupils seek someone to punish. They accuse the south wind, then the wall that stops it, then the rat."},
- {"title":"A circle of explanations","text":"Each accused points toward another power: cat, rope, knife, fire, water, ox, and tick. The chain finally returns to gazelle."},
- {"title":"The cost of certainty","text":"Unable to redirect the accusation, the gazelle is killed. The circular tale leaves the pupils' certainty beside their continuing loss."}]},
- {"id":"sultan-majnuns-date-palm","title":"Sultan Majnun's date palm","description":"The youngest son stays awake to confront the bird that has defeated the garden's previous watchers.","ageTier":"18+","regionTag":"east-africa","authorId":"swahili-collection","voice":"Microsoft George","sourceTitle":"Edward Steere, Swahili Tales (1870), Sultan Majnun, date-palm episode","sourceUrl":"https://en.wikisource.org/wiki/Swahili_Tales/Sultan_Majnun","culturalNote":"Adapted opening episode, not the complete tale; this Zanzibar collection reflects Indian Ocean narrative exchange.","scenes":[
- {"title":"The guarded garden","text":"Sultan Majnun tends a rich garden, yet a mysterious bird repeatedly eats the ripe dates before he can taste them."},
- {"title":"The youngest volunteer","text":"His older sons fail at keeping watch. The youngest asks for a turn, though his father doubts he will succeed."},
- {"title":"Wings above the palm","text":"The young watcher stays awake and seizes the bird's wing. It carries him high above the garden, urging him to let go."},
- {"title":"Returning to the ground","text":"He refuses to release it. The bird brings him safely down, beginning the bargain that carries the longer story onward."}]}
+  {
+    "id": "anansi-wisdom",
+    "title": "Anansi and the pot of wisdom",
+    "description": "Anansi's hoard of wisdom meets a son's practical insight in a fable about humility and shared knowledge.",
+    "regionTag": "west-africa",
+    "authorId": "akan-collection",
+    "voice": "Microsoft Zira Desktop",
+    "sourceTitle": "Barker and Sinclair, West African Folk-Tales (1917), II",
+    "sourceUrl": "https://www.gutenberg.org/files/66923/66923-h/66923-h.htm#ch2",
+    "culturalNote": "Abridged English adaptation of the collected Fante tale; not an original-language recording.",
+    "scenes": [
+      {
+        "title": "Wisdom in a pot",
+        "text": "In Fante country, Anansi gathered wisdom into a pot. Offended by his neighbors, he planned to keep it from them."
+      },
+      {
+        "title": "The difficult climb",
+        "text": "He carried the pot against his chest and tried to climb a tall tree. The pot kept getting in his way."
+      },
+      {
+        "title": "Kweku Tsin's advice",
+        "text": "His son Kweku Tsin watched below. Why not carry it on your back, the boy suggested. Anansi stopped climbing."
+      },
+      {
+        "title": "No one knows everything",
+        "text": "If all wisdom was inside his pot, how could his son know better? Anansi dropped the pot, scattering wisdom abroad."
+      }
+    ],
+    "collection": "FOLK_AND_FABLE"
+  },
+  {
+    "id": "tink-tinkje",
+    "title": "Tink-tinkje and the highest flight",
+    "description": "A tiny bird turns strength into a contest of wit in a southern African animal fable.",
+    "regionTag": "southern-africa",
+    "authorId": "southern-collection",
+    "voice": "Microsoft Hazel Desktop",
+    "sourceTitle": "James A. Honey, South-African Folk-Tales (1910), Tink-tinkje",
+    "sourceUrl": "https://www.gutenberg.org/cache/epub/38339/pg38339-images.html",
+    "culturalNote": "Abridged southern African animal tale; this source does not identify it specifically as Zulu.",
+    "scenes": [
+      {
+        "title": "The birds assemble",
+        "text": "The birds wanted a king. They argued about size, strength, and beauty, before choosing a contest of height."
+      },
+      {
+        "title": "Under Vulture's wing",
+        "text": "Vulture climbed toward the sun. Tiny Tink-tinkje rode unnoticed among his feathers, saving the strength of his own wings."
+      },
+      {
+        "title": "A voice from above",
+        "text": "Whenever Vulture claimed the crown, the little bird flew just above him. His small voice declared that he was higher."
+      },
+      {
+        "title": "The sleeping guard",
+        "text": "Angry birds chased the trickster into a hole. Owl guarded it, but fell asleep, and Tink-tinkje slipped away."
+      }
+    ],
+    "collection": "FOLK_AND_FABLE"
+  },
+  {
+    "id": "anansi-spider-tales",
+    "title": "How stories became Anansi tales",
+    "description": "Anansi bargains for the ownership of stories, bringing cunning, invention, and the art of telling into one tale.",
+    "regionTag": "west-africa",
+    "authorId": "akan-collection",
+    "voice": "Microsoft Zira Desktop",
+    "sourceTitle": "Barker and Sinclair, West African Folk-Tales (1917), I",
+    "sourceUrl": "https://www.gutenberg.org/files/66923/66923-h/66923-h.htm#ch1",
+    "culturalNote": "Condensed adaptation of this collected version; animal names and episodes vary across tellings.",
+    "scenes": [
+      {
+        "title": "Nyankupon's bargain",
+        "text": "Stories belonged to Nyankupon. Anansi asked to name them after himself. First, he must deliver bees, a great snake, and a tiger."
+      },
+      {
+        "title": "The jar of bees",
+        "text": "Anansi argued aloud that the bees could not fill his jar. They flew inside to prove him wrong, and he sealed it."
+      },
+      {
+        "title": "Measuring the snake",
+        "text": "He challenged the snake to match a stick, then bound it in place. Another deception helped him lead away the tiger."
+      },
+      {
+        "title": "A name for the tales",
+        "text": "Nyankupon saw that Anansi had fulfilled the bargain. The old stories could now bear the spider's name."
+      }
+    ],
+    "collection": "FOLK_AND_FABLE"
+  },
+  {
+    "id": "monkey-and-shark",
+    "title": "The monkey and the shark",
+    "description": "A coastal friendship becomes a fable of trust, quick thinking, and the danger beneath a generous invitation.",
+    "regionTag": "east-africa",
+    "authorId": "swahili-collection",
+    "voice": "Microsoft George",
+    "sourceTitle": "Edward Steere, Swahili Tales (1870), opening of The Washerman's Donkey",
+    "sourceUrl": "https://en.wikisource.org/wiki/Swahili_Tales/The_Story_of_the_Washerman%27s_Donkey",
+    "culturalNote": "Abridged Zanzibar Swahili framing tale in English; the threat is described without graphic detail.",
+    "scenes": [
+      {
+        "title": "Fruit above the sea",
+        "text": "A monkey shared fruit from a coastal fig tree with a shark. Their friendship lasted through many visits."
+      },
+      {
+        "title": "An invitation underwater",
+        "text": "The shark offered a journey home on his back. Halfway there, he admitted his ruler wanted the monkey's heart."
+      },
+      {
+        "title": "A quick answer",
+        "text": "The monkey said he had left his heart in the tree. Believing him, the shark turned toward the shore."
+      },
+      {
+        "title": "Safely among the branches",
+        "text": "The monkey climbed to safety and refused another journey. He would not mistake a dangerous invitation for friendship again."
+      }
+    ],
+    "collection": "FOLK_AND_FABLE"
+  },
+  {
+    "id": "two-messengers",
+    "title": "The chameleon and the second messenger",
+    "description": "A recorded Zulu origin narrative follows two messengers whose journeys shape the human understanding of mortality.",
+    "regionTag": "zulu",
+    "authorId": "zulu-collection",
+    "voice": "Microsoft Hazel Desktop",
+    "sourceTitle": "James A. Honey, South-African Folk-Tales (1910), A Zulu Version of the Origin of Death",
+    "sourceUrl": "https://www.gutenberg.org/cache/epub/38339/pg38339-images.html",
+    "culturalNote": "Retells a historical English rendering of a Zulu origin narrative; not a statement of shared contemporary belief.",
+    "scenes": [
+      {
+        "title": "The first message",
+        "text": "In this recorded Zulu telling, the creator sends Chameleon to tell human beings that they will not die."
+      },
+      {
+        "title": "Along the road",
+        "text": "Chameleon travels slowly, stopping to feed along the way. The hopeful message has still not reached the people."
+      },
+      {
+        "title": "The faster messenger",
+        "text": "A second messenger, called Salamander in this translation, is sent with a different message: human beings must die."
+      },
+      {
+        "title": "The message that arrived",
+        "text": "The faster messenger arrives first. The tale holds mortality and lost possibility within the distance between two journeys."
+      }
+    ],
+    "collection": "EPIC_AND_CHRONICLE"
+  },
+  {
+    "id": "washermans-donkey",
+    "title": "The washerman's donkey",
+    "description": "A cautionary animal fable about persuasion, repeated mistakes, and the warnings we choose to ignore.",
+    "regionTag": "east-africa",
+    "authorId": "swahili-collection",
+    "voice": "Microsoft George",
+    "sourceTitle": "Edward Steere, Swahili Tales (1870), The Story of the Washerman's Donkey",
+    "sourceUrl": "https://en.wikisource.org/wiki/Swahili_Tales/The_Story_of_the_Washerman%27s_Donkey",
+    "culturalNote": "Abridged cautionary fable; includes animal death without graphic description.",
+    "scenes": [
+      {
+        "title": "A promise from Hare",
+        "text": "In the monkey's tale, Hare persuades a washerman's donkey to visit Lion. An attractive promise conceals an ambush."
+      },
+      {
+        "title": "The first escape",
+        "text": "Lion's first attack fails, and the donkey escapes. Hare returns with reassurance, asking the donkey to believe him again."
+      },
+      {
+        "title": "The second visit",
+        "text": "The donkey returns and does not survive. Later, Hare takes the heart and ears that Lion had reserved for himself."
+      },
+      {
+        "title": "A dangerous excuse",
+        "text": "Hare argues that a creature with judgment would never have returned. The monkey finishes his warning and rejects the shark."
+      }
+    ],
+    "collection": "FOLK_AND_FABLE"
+  },
+  {
+    "id": "goso-the-teacher",
+    "title": "Goso and the chain of blame",
+    "description": "A philosophical fable follows grief through a circular chain of blame, questioning certainty and responsibility.",
+    "regionTag": "east-africa",
+    "authorId": "swahili-collection",
+    "voice": "Microsoft George",
+    "sourceTitle": "Edward Steere, Swahili Tales (1870), Goso the Teacher",
+    "sourceUrl": "https://en.wikisource.org/wiki/Swahili_Tales/Goso_the_Teacher",
+    "culturalNote": "Condensed adult adaptation about death, retaliatory violence, and circular blame; historical collection context retained.",
+    "scenes": [
+      {
+        "title": "Beneath the calabash tree",
+        "text": "Goso teaches children beneath a calabash tree. A gazelle dislodges a fruit, which falls and kills the teacher."
+      },
+      {
+        "title": "The search for a cause",
+        "text": "His pupils seek someone to punish. They accuse the south wind, then the wall that stops it, then the rat."
+      },
+      {
+        "title": "A circle of explanations",
+        "text": "Each accused points toward another power: cat, rope, knife, fire, water, ox, and tick. The chain finally returns to gazelle."
+      },
+      {
+        "title": "The cost of certainty",
+        "text": "Unable to redirect the accusation, the gazelle is killed. The circular tale leaves the pupils' certainty beside their continuing loss."
+      }
+    ],
+    "collection": "FOLK_AND_FABLE"
+  },
+  {
+    "id": "sultan-majnuns-date-palm",
+    "title": "Sultan Majnun's date palm",
+    "description": "The opening episode of a larger Swahili adventure follows a youngest son into a royal vigil, a mysterious bird, and the promise of a journey.",
+    "regionTag": "east-africa",
+    "authorId": "swahili-collection",
+    "voice": "Microsoft George",
+    "sourceTitle": "Edward Steere, Swahili Tales (1870), Sultan Majnun, date-palm episode",
+    "sourceUrl": "https://en.wikisource.org/wiki/Swahili_Tales/Sultan_Majnun",
+    "culturalNote": "Adapted opening episode, not the complete tale; this Zanzibar collection reflects Indian Ocean narrative exchange.",
+    "scenes": [
+      {
+        "title": "The guarded garden",
+        "text": "Sultan Majnun tends a rich garden, yet a mysterious bird repeatedly eats the ripe dates before he can taste them."
+      },
+      {
+        "title": "The youngest volunteer",
+        "text": "His older sons fail at keeping watch. The youngest asks for a turn, though his father doubts he will succeed."
+      },
+      {
+        "title": "Wings above the palm",
+        "text": "The young watcher stays awake and seizes the bird's wing. It carries him high above the garden, urging him to let go."
+      },
+      {
+        "title": "Returning to the ground",
+        "text": "He refuses to release it. The bird brings him safely down, beginning the bargain that carries the longer story onward."
+      }
+    ],
+    "collection": "EPIC_AND_CHRONICLE"
+  }
 ]

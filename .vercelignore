@@ -1,0 +1,6 @@
+.env
+.env.*
+.qa
+prisma/*.db*
+.git
+.vercel

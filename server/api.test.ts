@@ -13,13 +13,22 @@ test('SQLite API: migrated catalog, PIN sessions, ownership, voice preferences a
   const url = `file:./${file}`;
   const sqlite = createClient({ url });
   await sqlite.executeMultiple(await readFile('prisma/migrations/20261105000000_init/migration.sql', 'utf8'));
+  await sqlite.executeMultiple(await readFile('prisma/migrations/20261106000000_thematic_collections/migration.sql','utf8'));
   sqlite.close();
   process.env.DATABASE_URL = url;
+  process.env.PRESENTATION_MODE = 'true';
   const seed = () => execFileSync(process.execPath, ['node_modules/tsx/dist/cli.mjs', 'prisma/seed.ts'], { env: { ...process.env, DATABASE_URL: url }, stdio: 'pipe' });
   seed();
   const { db } = await import('./db.ts');
-  const { handleApi } = await import('./api.ts');
-  const server = createServer((request, response) => void handleApi(request, response));
+  const { default: handleApi } = await import('../api/[...path].ts');
+  const server = createServer(async (request, response) => {
+    if (request.headers['x-test-parsed-body'] === 'true') {
+      let raw = '';
+      for await (const chunk of request) raw += String(chunk);
+      Object.assign(request, { body: JSON.parse(raw) });
+    }
+    await handleApi(request, response);
+  });
   await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
   const address = server.address();
   assert.ok(address && typeof address !== 'string');
@@ -38,8 +47,11 @@ test('SQLite API: migrated catalog, PIN sessions, ownership, voice preferences a
       const catalog = catalogSchema.parse(await response.json());
       assert.equal(catalog.stories.length, 8);
       assert.equal(catalog.creators.length, 4);
-      assert.deepEqual(Object.keys(catalog.stories.reduce<Record<string, number>>((totals, story) => { const tier = Object.keys(story.tierVariants)[0]; totals[tier] = (totals[tier] || 0) + 1; return totals; }, {})).sort(), ['10-13', '14-17', '18+', '5-9']);
-      assert.equal(catalog.stories.flatMap(story => Object.values(story.tierVariants).flatMap(variant => variant?.keyframes ?? [])).length, 32);
+      assert.equal(catalog.stories.filter(s=>s.collection==='FOLK_AND_FABLE').length,6); assert.equal(catalog.stories.filter(s=>s.collection==='EPIC_AND_CHRONICLE').length,2);
+      assert.equal(catalogSchema.parse(await(await call('/catalog?collection=FOLK_AND_FABLE')).json()).stories.length,6);
+      assert.equal(catalogSchema.parse(await(await call('/catalog?collection=EPIC_AND_CHRONICLE')).json()).stories.length,2);
+      assert.equal((await call('/catalog?collection=ALL')).status,400);
+      assert.equal(catalog.stories.flatMap(story => story.presentation.keyframes).length, 32);
       for (const story of catalog.stories) {
         assert.ok(catalog.creators.some(creator => creator.id === story.creatorId));
         assert.ok(story.sourceUrl);
@@ -71,6 +83,27 @@ test('SQLite API: migrated catalog, PIN sessions, ownership, voice preferences a
     });
     const first = await login('  First.Creator@Example.test  ');
     const second = await login('second@example.test');
+    await t.test('serverless pre-parsed JSON is handled after its stream is consumed', async () => {
+      const request = (body: unknown) => fetch(`${origin}/api/v1/auth/otp/request`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-test-parsed-body': 'true' }, body: JSON.stringify(body) });
+      assert.equal((await request({ email: 'serverless@example.test' })).status, 200);
+      assert.equal((await request({ email: 'invalid' })).status, 400);
+      assert.equal((await request({ email: 'a'.repeat(25000) })).status, 413);
+    });
+    await t.test('image endpoint rejects guests and malformed input; demo sessions only get fallback', async () => {
+      const input = { collection: 'FOLK_AND_FABLE', sceneNumber: 1, prompt: 'An acacia tree at sunset.' };
+      assert.equal((await call('/images/keyframe', 'POST', input)).status, 401);
+      assert.equal((await call('/images/keyframe', 'POST', { ...input, collection: 'ALL' }, first.token)).status, 400);
+      const missing = await (await call('/images/keyframe', 'POST', input, first.token)).json();
+      assert.equal(missing.provenance, 'Oralia illustrative placeholder; not AI generated');
+      process.env.OPENAI_API_KEY = 'test-only-must-never-be-sent';
+      try {
+        const result = await (await call('/images/keyframe', 'POST', input, first.token)).json();
+        assert.equal(result.fallbackReason, 'presentation-demo');
+      } finally { delete process.env.OPENAI_API_KEY; }
+      process.env.PRESENTATION_MODE = 'false';
+      try { assert.equal((await call('/auth/otp/request', 'POST', { email: 'blocked@example.test' })).status, 403); }
+      finally { process.env.PRESENTATION_MODE = 'true'; }
+    });
     await t.test('persistent sessions map to database users and public profiles, not seeded identities', async () => {
       assert.equal(first.email, 'first.creator@example.test');
       assert.equal((await db.user.findUniqueOrThrow({ where: { id: first.id } })).role, 'CREATOR');

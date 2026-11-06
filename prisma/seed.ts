@@ -1,9 +1,9 @@
 import { readFile } from 'node:fs/promises';
 import { z } from 'zod';
 import { db } from '../server/db.ts';
-import { ageTierSchema } from '../src/types/story.ts';
+import { storyCollectionSchema } from '../src/types/story.ts';
 
-const seedSchema = z.object({ id: z.string(), title: z.string(), description: z.string(), ageTier: ageTierSchema, regionTag: z.string(), authorId: z.string(), sourceTitle: z.string(), sourceUrl: z.string().url(), culturalNote: z.string(), scenes: z.array(z.object({ title: z.string(), text: z.string() })).length(4) });
+const seedSchema = z.object({ id: z.string(), title: z.string(), description: z.string(), collection: storyCollectionSchema, regionTag: z.string(), authorId: z.string(), sourceTitle: z.string(), sourceUrl: z.string().url(), culturalNote: z.string(), scenes: z.array(z.object({ title: z.string(), text: z.string() })).length(4) });
 const narrationSchema = z.object({ id: z.string(), durationSeconds: z.number().positive(), cues: z.array(z.object({ title: z.string(), caption: z.string(), startTime: z.number().nonnegative(), endTime: z.number().positive() })).length(4) });
 const seeds = seedSchema.array().parse(JSON.parse(await readFile(new URL('./content/stories.json', import.meta.url), 'utf8')));
 const tracks = narrationSchema.array().parse(JSON.parse(await readFile(new URL('./content/narration.json', import.meta.url), 'utf8')));

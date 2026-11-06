@@ -2,13 +2,11 @@
 
 **Status:** Research baseline with local Phase 4 implementation notes
 **Reviewed:** 5 November 2026
-**Scope:** Browser playback and offline behavior, creator exports, age-tier prompt design, and operational gaps. Production recommendations are distinguished from the implemented local system below.
 
 ## Local Phase 4 findings
 
 - **Database boundary:** Prisma/SQLite runs in TypeScript Vite dev/preview middleware under /api/v1. React consumes validated JSON; there is no Prisma import or catalog fixture fallback in the browser. Migration, db push and idempotent seeding are part of local setup. The seed preserves user bookmarks/accounts; migration and API tests use a separate temporary database.
 - **Authenticity and scope:** Eight abridged English adaptations identify their historical collection, region and cultural limitations. The sources include Barker/Sinclair's [West African Folk-Tales](https://www.gutenberg.org/files/66923/66923-h/66923-h.htm), Honey's [South-African Folk-Tales](https://www.gutenberg.org/cache/epub/38339/pg38339-images.html), and [Swahili Tales](https://en.wikisource.org/wiki/Swahili_Tales). Historical translations are not substitutes for contemporary community review. Do not label the southern African tink-tinkje tale as Zulu merely because both appear in a regional collection. Story-specific source notes travel to the Listening Room and export manifest.
-- **Audio provenance:** The bundled speech is Windows-synthesized English, marked STUDIO_AI, with measured PCM cue ranges. No original author microphone recordings or reviewed dialect translations are supplied. Seed age assignments support UI curation and are not formal school approvals. The four visual tiers preserve the same source narration rather than falsely claiming age-specific spoken adaptations.
 - **Failure behavior:** A local media availability endpoint avoids requesting a missing audio URL. Web Audio can render a quiet timing tone into a WAV blob; the normal HTML audio element then remains the only clock. Explicitly label the tone as non-narration, cancel stale synthesis work after source changes, and release blob URLs. Image errors preserve narration/transcript and the scene title. A missing database produces a visible retry state, never unrelated stories.
 - **Authentication simulation:** The requested email/PIN flow intentionally accepts any six digits and sends no email. Single-use five-minute challenges, hashed seven-day sessions, reserved collection addresses and account-scoped bookmark/voice writes support realistic local behavior; they do not verify email ownership. Persisting this requested simulator session in localStorage is a presentation contract, not a production identity design.
 - **Interaction audit:** Include nested Escape behavior, session/bookmark reload recovery, all 32 scene boundaries, both playback voice choices, missing-media tone playback, empty regional intersections, ZIP payload integrity, mobile header width and reduced motion. Offline PWA downloads, durable drafts, AI generation and real transactional email remain separate production work.
@@ -17,7 +15,6 @@
 
 1. Treat the `HTMLAudioElement` timeline as the playback clock. `timeupdate` is adaptive and can arrive only about 4–66 times per second, so it is not precise enough by itself for slide boundaries. Poll `currentTime` with `requestAnimationFrame` while playing, but publish React updates only when the active keyframe changes. With an image already fetched and decoded, the visual can change on the next paint; browser scheduling, timer precision, and image decode mean this is near-frame sync, not a literal zero-latency guarantee. [MDN: `timeupdate`](https://developer.mozilla.org/en-US/docs/Web/API/HTMLMediaElement/timeupdate_event), [MDN: `currentTime`](https://developer.mozilla.org/en-US/docs/Web/API/HTMLMediaElement/currentTime), [MDN: `requestAnimationFrame`](https://developer.mozilla.org/en-US/docs/Web/API/Window/requestAnimationFrame), [React: `useSyncExternalStore`](https://react.dev/reference/react/useSyncExternalStore)
 2. Make Mode 2 a durable asynchronous job. Store generated assets privately, package them into a ZIP, and email a link that can mint a short-lived download URL. Keep the archive out of the normal email path; MIME encoding increases size and each email provider and recipient mailbox has its own limits. [Cloudflare R2: presigned URLs](https://developers.cloudflare.com/r2/api/s3/presigned-urls/), [Resend: sending attachments](https://resend.com/docs/api-reference/emails/send-email)
-3. Use a shared visual bible and four explicit age-tier style modifiers. Keep visual style separate from story age rating and content safety. Generate and curate each tier variant; do not treat a style prompt or moderation score as proof that content is suitable for children. [OpenAI: Image generation](https://developers.openai.com/api/docs/guides/image-generation), [OpenAI: Moderation](https://developers.openai.com/api/docs/guides/moderation)
 4. Offline playback needs an explicit “save story” contract. Cache the app shell and metadata by default, but cache substantial audio only when the user asks for offline access. Bound and expire media caches, check storage estimates, support range requests for cached audio, and show an offline/partial-download state. [Workbox: serving cached audio and video](https://developer.chrome.com/docs/workbox/serving-cached-audio-and-video), [Workbox: storage quota](https://developer.chrome.com/docs/workbox/understanding-storage-quota)
 
 ## 1. Audio-image synchronization
@@ -74,38 +71,11 @@ If a provider such as Resend is selected, keep it behind an `EmailProvider` adap
 
 `queued → transcribing → planning → generating → packaging → ready → expired`; any active state may enter `retrying` or `failed`. Keep email status separate: `pending → sent → delivered | bounced | complained | failed`. Store provider event IDs, but do not log signed URLs or raw audio/transcripts by default. Users should be able to retry a notification without rerunning generation, request a fresh download link, and delete a project and its retained source assets.
 
-## 3. Multi-tier age-targeted prompt engineering
+## 3. Thematic prompt engineering
 
-### Prompt construction
+Use one visual bible per story: stable characters, setting, period, composition and palette. Folk & Fable modifiers emphasize warm illustrated storytelling, expressive characters and readable compositions. Epic & Chronicle modifiers emphasize cinematic framing, environmental detail, historical texture and narrative consequence. Do not invent cultural details or claim style changes create a reviewed translation or suitable school resource.
 
-Build each image prompt from fixed, reviewable fields rather than concatenating raw transcript text without boundaries:
-
-1. **Story beat:** one concise, literal description of the moment, extracted from approved story content.
-2. **Cultural and historical grounding:** user/curator-supplied region, community, period, setting, clothing, objects, and language. If unknown, ask for a neutral setting; do not fill gaps with a generic “African” look or invented sacred symbols.
-3. **Character/style bible:** approved recurring-character descriptions, age, clothing, key colors, camera distance, lighting, palette, aspect ratio, and image references where available.
-4. **Tier modifier:** exactly one of the reviewed style profiles below.
-5. **Safety/content envelope:** story rating and allowed/intensity constraints, independent of style. If a story is not appropriate for a tier, exclude it or route it for human adaptation; do not try to make an unsuitable plot safe by changing its art style.
-6. **Output constraints:** single carousel image, consistent crop-safe subject placement, no embedded text/logos/watermarks, plus a text alt description generated and reviewed separately.
-
-Use a persistent visual bible or reference image for recurring characters and style continuity. Image generation can still vary character details across generations; the prompt alone does not guarantee a character match. Budget for human review, retries, and corrections. [OpenAI: Image generation limitations and reference images](https://developers.openai.com/api/docs/guides/image-generation)
-
-### Reviewed style modifiers
-
-These are proposed starting modifiers to A/B and curate; they are not a substitute for age-rating rules.
-
-| Tier | Style modifier | Tone and constraints |
-|---|---|---|
-| **5–9** | “Vibrant picture-book illustration, soft gouache and watercolor textures, rounded readable shapes, warm clear palette, expressive friendly faces, simple uncluttered composition, gentle wonder, soft light.” | Reassuring, concrete, visually legible. Keep peril mild and brief; avoid graphic injury, frightening close-ups, sexualized depictions, or realistic weapons. Prefer a resolved or reassuring image when a beat contains danger. |
-| **10–13** | “Adventure graphic-novel / illustrated chapter-book look, confident ink contours, expressive poses, layered but readable setting, energetic framing, bold controlled color palette, cinematic page-illustration composition.” | Curiosity, agency, teamwork, and discovery. Suspense may be moderate, but depict harm non-graphically and avoid adult sexual themes or glamorized violence. |
-| **14–17** | “Cinematic YA graphic-novel realism, painterly environmental detail, expressive character acting, nuanced light and shadow, dynamic but coherent framing, emotionally complex mood, grounded visual texture.” | Allow complex stakes and ambiguity while keeping violence non-graphic and sexual content non-explicit/non-exploitative. Avoid presenting stereotypes as shorthand for a character or community. |
-| **18+** | “Mature cinematic concept art, high-detail material and environmental rendering, historically grounded props and architecture, deliberate composition, atmospheric lighting, layered visual symbolism, emotionally nuanced adult tone.” | Permit historical depth and difficult themes where separately rated and reviewed. “18+” is not a blanket permission for disallowed sexual, exploitative, or graphic content; keep the platform's safety policy in force. |
-
-### Dialect and subtitle handling
-
-- Keep the original-language transcript, normalized/translated subtitles, dialect label, and editorial corrections as separate fields. Never overwrite the source utterance with a normalized form.
-- Let curators tag spelling/pronunciation variants and correct names, proverbs, and culturally specific vocabulary. A language model's confidence is not evidence that a dialect transcription is correct.
-- Store caption start/end times in the same audio timeline used by the carousel; provide a transcript correction flow and a visible distinction between original-language text and translation.
-- Generate alt text per tier variant and language. Do not use image prompt text as the accessibility description.
+Preserve the original spoken narration and measured cues. Collection names are literary descriptors; moderation and editorial review remain independent publication requirements.
 
 ## 4. Resilience and offline behavior
 

@@ -8,16 +8,16 @@ Oralia is an audio-first visual carousel platform designed as **Instagram for Af
 
 ## The Problem It Solves
 
-African oral traditions and regional folklore are rich, while video production demands editing skills, rendering time, large files, and reliable bandwidth. Educational tools can also lack culturally resonant, age-adapted storytelling experiences. Oralia brings audio, imagery, and text together to make those narratives easier to explore and share.
+African oral traditions and regional folklore are rich, while video production demands editing skills, rendering time, large files, and reliable bandwidth. Educational tools can also lack culturally resonant, thematically curated storytelling experiences. Oralia brings audio, imagery, and text together to make those narratives easier to explore and share.
 
 ## The Technical Approach
 
-1. **Audio and keyframe analysis:** The intended server-side AI workflow transcribes recordings and proposes timestamped narrative beats for creator/editor review. The local catalog already provides measured, narration-aligned scene boundaries.
+1. **Audio and keyframe analysis:** The intended server-side AI workflow transcribes recordings and proposes timestamped narrative beats for creator/editor review. The database catalog already provides measured, narration-aligned scene boundaries.
 2. **Zero-video carousel:** One HTML audio element supplies the playback clock. React selects the active image and caption, preloading upcoming scenes. Ready images can change on the next paint; browsers cannot guarantee literal zero-latency updates.
 3. **Three modes:**
    - **Vellum:** Public discovery, creator profiles, filtering, and an immersive Listening Room. Readers need no login.
    - **Creator & Game Studio:** Voice recording/upload, editable storyboard prompts, scene reordering and timing, JSON inspection, and a real ZIP asset export. AI generation and email delivery are explicitly simulated.
-   - **Education & Schooling:** Four age tiers—**5–9**, **10–13**, **14–17**, **18+**—with distinct visual themes and region/tradition filters. The current collection has English captions; the dialect overlay explains when no reviewed dialect track is available.
+   - **Education & Schooling:** Two thematic literary collections: Folk & Fable and Epic & Chronicle. The current collection has English captions; the dialect overlay explains when no reviewed dialect track is available.
 
 ## Why Oralia
 
@@ -26,14 +26,14 @@ Audio plus timed images can reduce production work and bandwidth compared with a
 ## Tech Stack
 
 - **Frontend:** React, strict TypeScript, Tailwind CSS, Vite; accessible custom dropdowns and native modal dialogs.
-- **Local API:** TypeScript Node middleware under `/api/v1`, attached to Vite dev and preview servers.
-- **Database:** Prisma ORM with SQLite and the libSQL adapter. Prisma runs exclusively in `server/`; React uses a Zod-validated fetch client.
+- **API:** Shared TypeScript `/api/v1` handler, attached to Vite locally and a Node function on Vercel.
+- **Database:** Prisma ORM with Turso/libSQL for hosting and SQLite for isolated local work. Prisma runs exclusively in `server/`; React uses a Zod-validated fetch client.
 - **State and sync:** HTML5 audio, paint-aligned keyframe selection, React hooks, account bookmarks, and persisted local simulator sessions.
 - **Planned integrations:** OpenAI transcription/storyboard/image workflows, durable jobs, private media storage/CDN, and transactional email. No provider keys are required for the local application.
 
 ## Getting Started
 
-Use Node.js **22.12 or newer** and npm. Run from the project root:
+Use Node.js **22.12 or newer** and npm. For a local SQLite setup, copy .env.example to .env, set DATABASE_URL=file:./prisma/oralia.db and PRESENTATION_MODE=true, then run from the project root. For cloud setup, follow Turso and Vercel below instead:
 
 ```bash
 npm install
@@ -46,7 +46,7 @@ npm run dev
 
 Open the local URL printed by Vite, normally [http://127.0.0.1:5173](http://127.0.0.1:5173).
 
-The default database is `prisma/oralia.db`. The committed initial migration supports a fresh checkout; the database and generated Prisma client are ignored by Git. `DATABASE_URL` can override the default `file:./prisma/oralia.db` through the process environment. Relative paths resolve from the project root. Reseeding updates the eight catalog stories, 32 scenes, and four editorial profiles without deleting created users, sessions, or bookmarks.
+Without cloud credentials or an explicit local override, the default database is `prisma/oralia.db`. The committed initial migration supports a fresh checkout; the database and generated Prisma client are ignored by Git. `DATABASE_URL` can override the default `file:./prisma/oralia.db` through the process environment. Relative paths resolve from the project root. Reseeding updates the eight catalog stories, 32 scenes, and four editorial profiles without deleting created users, sessions, or bookmarks.
 
 ```bash
 npm test         # Domain/media checks and isolated SQLite API integration tests
@@ -55,7 +55,7 @@ npm run preview  # Local built-client preview with the same database API
 npx prisma migrate status
 ```
 
-The API is supplied by Vite middleware for **local development and presentation**. Deploying only `dist/` to a static host will not supply its database endpoints. A production deployment needs a separately hosted API and verified authentication.
+Vite middleware supplies the local API; Vercel deploys the shared handler through its Node function. Deploying only dist to a generic static host does not supply database endpoints. Hosted sign-in remains a labeled presentation demo; verified production authentication is deferred.
 
 ## Local Creator Sign-In
 
@@ -69,16 +69,14 @@ The **Voice Quality Safeguard** saves Original Phone Mic Audio or Studio AI Synt
 
 ## Catalog and Content Sources
 
-Eight abridged English adaptations cover two stories per age tier. Each has four credited 1920px Unsplash scene photographs, a local synthetic narration track, measured caption cues, and a source/cultural-context note. All seeded narration is marked `STUDIO_AI`; the bundled WAV files use Windows speech synthesis, not community recordings or a live OpenAI request. Photographs convey atmosphere and do not claim to depict the historical episodes.
+Eight abridged English adaptations span six fables and two origin/adventure narratives. Each has four credited 1920px Unsplash scene photographs, a local synthetic narration track, measured caption cues, and a source/cultural-context note. All seeded narration is marked `STUDIO_AI`; the bundled WAV files use Windows speech synthesis, not community recordings or a live OpenAI request. Photographs convey atmosphere and do not claim to depict the historical episodes.
 
-| Tier | Stories |
+| Collection | Stories |
 |---|---|
-| 5–9 | Anansi and the pot of wisdom; Tink-tinkje and the highest flight |
-| 10–13 | How stories became Anansi tales; The monkey and the shark |
-| 14–17 | The chameleon and the second messenger; The washerman's donkey |
-| 18+ | Goso and the chain of blame; Sultan Majnun's date palm |
+| Folk & Fable | Anansi and the pot of wisdom; Tink-tinkje and the highest flight; How stories became Anansi tales; The monkey and the shark; The washerman's donkey; Goso and the chain of blame |
+| Epic & Chronicle | The chameleon and the second messenger; Sultan Majnun's date palm |
 
-Adaptations identify the versions they follow: Barker and Sinclair's [West African Folk-Tales](https://www.gutenberg.org/files/66923/66923-h/66923-h.htm), Honey's [South-African Folk-Tales](https://www.gutenberg.org/cache/epub/38339/pg38339-images.html), and the historical [Swahili Tales](https://en.wikisource.org/wiki/Swahili_Tales) collection. These historical collections have translation and editorial limitations; region labels and age assignments do not imply community certification or school approval. Source details appear in each Listening Room and exported manifest. Photo attribution travels in `CREDITS.txt` and the manifest.
+Adaptations identify the versions they follow: Barker and Sinclair's [West African Folk-Tales](https://www.gutenberg.org/files/66923/66923-h/66923-h.htm), Honey's [South-African Folk-Tales](https://www.gutenberg.org/cache/epub/38339/pg38339-images.html), and the historical [Swahili Tales](https://en.wikisource.org/wiki/Swahili_Tales) collection. These historical collections have translation and editorial limitations; region labels and literary classifications do not imply community certification or school approval. Source details appear in each Listening Room and exported manifest. Photo attribution travels in `CREDITS.txt` and the manifest.
 
 To regenerate the included narration on Windows, run `scripts/generate-demo-narration.ps1` in Windows PowerShell, then reseed. The generator reads `prisma/content/stories.json` and writes measured cues to `prisma/content/narration.json`. Playback elsewhere uses the committed WAV assets and requires no Windows speech engine.
 
@@ -95,25 +93,36 @@ To regenerate the included narration on Windows, run `scripts/generate-demo-narr
 ## Project Layout
 
 ```text
-prisma/                 Schema, initial migration, seed, source text and measured cues
+prisma/                 Schema, immutable local migrations, seed and measured cues
 server/                 Prisma client boundary, catalog adapter, HTTP API, Vite plugin, API tests
 src/components/         Discovery, profiles, player, Creator Studio, education and dialogs
 src/hooks/              Catalog/session/bookmark state, media clock, recording and public views
 src/lib/                Validated fetch client, catalog filtering, timing tone and ZIP exports
-src/types/              Shared Zod contracts and canonical AgeTier keys
-src/data/presentation.ts Visual tier presets only; no story fixtures
+src/types/              Shared Zod contracts and canonical StoryCollection keys
+src/data/presentation.ts Visual collection presets only; no story fixtures
 public/media/           Bundled narration assets
 ```
 
 ## Verification
 
-Verified locally on 6 November 2026:
+Run npm test, npm run build, npx prisma validate and npx prisma migrate status. The isolated tests cover initial installation, data-preserving collection migration, collection query validation, review gating, geographic intersections, authentication and idempotent reseeding. Browser checks exercise both collection filters plus All Collections, all source narratives and scene boundaries, profiles, and studio exports.
 
-- `prisma validate` and `prisma migrate status` pass. Read-only Prisma integrity, relationship, timeline, and API checks confirm eight stories, 32 scenes, and four collection profiles. The working SQLite file's SHA-256 remains unchanged; no reseed or migration was applied during cleanup.
-- `npm test`: 22 passing domain/media/API checks, including migration into an isolated SQLite database, a second seed that preserves bookmarks, and compatibility for corrected source chapter links.
-- `npm run build`: strict TypeScript and client bundling pass without warnings. The client bundle contains no Prisma or libSQL code.
-- Browser audit in Microsoft Edge: 126 main-flow, 26 recovery/accessibility, and 133 cleanup-specific checks pass. The cleanup checks cover every Vellum byline, keyboard modal focus, delayed/failed profile refresh, avatar image failure, themed draft playback, session recovery, and all three modes at 320, 390, 768, and 1440px in both themes. Authentication writes use an isolated database copy. Normal journeys have no console errors or warnings; deliberately injected request failures are recorded separately.
-- All ten distinct attribution URLs respond successfully, including both corrected Gutenberg chapter anchors. Legacy stored URLs are adapted when served, preserving the database and source provenance.
-- Built preview serves the database API, all eight WAV files return valid byte-range responses, playback advances the media clock, and closing the Listening Room releases audio.
+The migration preserves account, session, bookmark, story and scene IDs. Back up the local database before applying it. Existing downloaded archives remain unchanged; new exports use oralia-storyboard-v3 with project.collection.
 
 See [RESEARCH.md](RESEARCH.md), [ARCHITECTURE.md](ARCHITECTURE.md), and [AGENTS.md](AGENTS.md) for research, current contracts, the production roadmap, and contributor standards.
+
+## Turso and Vercel
+
+Copy .env.example to ignored .env and set server-only TURSO_DATABASE_URL and TURSO_AUTH_TOKEN. Runtime and seed commands use Turso when these are configured. An explicit DATABASE_URL=file:./prisma/oralia.db selects local SQLite for development; Vercel rejects local database configuration. Never expose secrets through VITE_ variables.
+
+The libSQL dependencies are already installed. Run npm run db:deploy:turso to inspect and initialize an empty remote schema or verify a compatible existing schema. This command generates SQL from Prisma, records its checksum, and refuses incompatible schemas without resetting data. Prisma CLI schema commands use local DATABASE_URL; prisma db push does not deploy the remote adapter. Local migration history remains unchanged.
+
+Run npx prisma db seed and npm run db:verify:turso with cloud runtime credentials. Repeated seeding upserts eight sourced stories, 32 scenes and four editorial profiles while retaining unrelated users and content. Local demo accounts and sessions are not transferred. Do not run schema deployment or seeding from builds or functions.
+
+For Vercel, use the Vite preset, npm run build and dist output. Configure TURSO_DATABASE_URL, TURSO_AUTH_TOKEN and PRESENTATION_MODE=true in the chosen Vercel environment. api/[...path].ts serves /api/v1/* as a Node function; narration and fallback images are static public assets. Build generates Prisma and the media manifest, then type-checks and bundles without database access. Runtime media-status uses that manifest rather than filesystem reads. No Vercel project has been published by these scripts.
+
+PRESENTATION_MODE=true enables the explicitly labeled PIN simulator. It accepts any six digits and sends no email; it is not secure email ownership verification. Omit or set false to disable creation of demo challenges and sessions. Demo sessions can never authorize paid image generation.
+
+POST /api/v1/images/keyframe accepts an authenticated request with collection, sceneNumber (1–4) and prompt (1–2000 characters). It returns a bundled illustrative SVG, its MIME type/provenance and fallback reason. OPENAI_API_KEY and OPENAI_IMAGE_MODEL configure the server-only provider adapter; the demo endpoint still uses fallback even when a key exists. Public paid generation, durable generated asset storage and studio integration remain deferred. Existing storyboard and ZIP workflows are unchanged. See [OpenAI image generation](https://developers.openai.com/api/docs/guides/image-generation).
+
+Verification uses isolated SQLite for automated writes. Run npm test and npm run build; use npm run db:verify:turso for read-only remote catalog verification. A successful local build is not a published Vercel deployment.

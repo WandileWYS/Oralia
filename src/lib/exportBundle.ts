@@ -4,8 +4,8 @@ const imageExtensions: Record<string, string> = { 'image/svg+xml': 'svg', 'image
 
 export function buildManifest(bundle: CreatorAssetBundle) {
   return {
-    schemaVersion: 'oralia-storyboard-v2',
-    project: { id: bundle.id, name: bundle.projectName, ageTier: bundle.ageTier, pitch: bundle.pitch, voiceType: bundle.voiceType },
+    schemaVersion: 'oralia-storyboard-v3',
+    project: { id: bundle.id, name: bundle.projectName, collection: bundle.collection, pitch: bundle.pitch, voiceType: bundle.voiceType },
     source: bundle.source,
     timingBasis: 'editable-storyboard-seconds',
     durationSeconds: bundle.frames.at(-1)?.endTime ?? 0,
@@ -20,7 +20,7 @@ export async function packageStoryboard(bundle: CreatorAssetBundle) {
   const zip = new JSZip();
   const draft = buildManifest(bundle);
   const frames = await Promise.all(draft.frames.map(async frame => {
-    const response = await fetch(frame.imageUrl);
+    const response = await fetch(frame.imageUrl, { signal: AbortSignal.timeout(20000) });
     const mimeType = response.headers.get('content-type')?.split(';')[0].trim() ?? '';
     if (!response.ok || !imageExtensions[mimeType]) throw new Error('Scene image unavailable.');
     const bytes = await response.arrayBuffer();

@@ -1,18 +1,9 @@
-import type { AgeTier, Story, StoryVariant } from '../types/story.ts';
-
-export interface StoryEntry { story: Story; variant: StoryVariant }
-
-export function getPlayableStories(stories: readonly Story[], ageTier: AgeTier): StoryEntry[] {
-  return stories.flatMap(story => {
-    const variant = story.tierVariants[ageTier];
-    if (!variant || variant.ageTier !== ageTier || variant.reviewStatus !== 'approved' || !variant.keyframes.length) return [];
-    return [{ story, variant }];
-  });
+import type { CollectionFilter, Story, StoryPresentation } from '../types/story.ts';
+export interface StoryEntry { story: Story; presentation: StoryPresentation }
+export function getPlayableStories(stories: readonly Story[], collection: CollectionFilter = 'ALL'): StoryEntry[] {
+ return stories.filter(story => (collection === 'ALL' || story.collection === collection) && story.presentation.reviewStatus === 'approved' && story.presentation.keyframes.length > 0).map(story => ({ story, presentation: story.presentation }));
 }
-
-export function getCreatorStories(stories: readonly Story[], creatorId: string, ageTier: AgeTier): StoryEntry[] {
-  return getPlayableStories(stories, ageTier).filter(({ story }) => story.creatorId === creatorId && story.publishedAt);
-}
+export function getCreatorStories(stories: readonly Story[], creatorId: string, collection: CollectionFilter = 'ALL') { return getPlayableStories(stories, collection).filter(({story}) => story.creatorId === creatorId && story.publishedAt); }
 
 export function storyHref(id: string) { return `#stories/${encodeURIComponent(id)}`; }
 export function creatorHref(username: string) { return `#creators/${encodeURIComponent(username)}`; }

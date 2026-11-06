@@ -17,6 +17,11 @@ enum VoiceType {
   STUDIO_AI
 }
 
+enum StoryCollection {
+  FOLK_AND_FABLE
+  EPIC_AND_CHRONICLE
+}
+
 model User {
   id                 String     @id @default(cuid())
   name               String
@@ -35,7 +40,7 @@ model Story {
   id               String          @id
   title            String
   description      String
-  ageTier          String
+  collection       StoryCollection
   regionTag        String
   audioUrl         String
   originalAudioUrl String?
@@ -51,7 +56,7 @@ model Story {
   scenes           KeyframeScene[]
   bookmarks        Bookmark[]
 
-  @@index([ageTier, publishedAt])
+  @@index([collection, publishedAt])
   @@index([authorId])
 }
 

@@ -1,6 +1,7 @@
+import { collectionLabels } from '../types/story';
 import { useRef, useState } from 'react';
 import { AudioLines, BookOpen, Compass, Layers3, LogOut, Mail, Menu, Moon, Sun, X } from 'lucide-react';
-import { ageTiers, type AgeTier } from '../types/story';
+import { collectionOptions, type CollectionFilter } from '../types/story';
 import type { AppMode } from '../types/mode';
 import { cn } from '../lib/utils';
 import { DropdownSelect } from './DropdownSelect';
@@ -10,8 +11,8 @@ import { creatorHref } from '../lib/catalog';
 interface NavbarProps {
   mode: AppMode;
   onModeChange: (mode: AppMode) => void;
-  ageTier: AgeTier;
-  onAgeTierChange: (tier: AgeTier) => void;
+  collection: CollectionFilter;
+  onCollectionChange: (value: CollectionFilter) => void;
   theme: 'dark' | 'light';
   onThemeChange: () => void;
   session: CreatorSession | null;
@@ -22,7 +23,6 @@ const modes = [
   { id: 'creator_studio', label: 'Creator Studio', icon: Layers3 },
   { id: 'education', label: 'Education', icon: BookOpen },
 ] as const;
-const ageOptions = ageTiers.map(value => ({ value, label: `${value.replace('-', '–')} years` }));
 
 function AccountAvatar({ session }: { session: CreatorSession }) {
   const [failedSource, setFailedSource] = useState<string | null>(null);
@@ -30,7 +30,7 @@ function AccountAvatar({ session }: { session: CreatorSession }) {
   return <span className="account-avatar" aria-hidden="true">{initials}{session.avatarUrl && failedSource !== session.avatarUrl && <img src={session.avatarUrl} alt="" onError={() => setFailedSource(session.avatarUrl)} />}</span>;
 }
 
-export function Navbar({ mode, onModeChange, ageTier, onAgeTierChange, theme, onThemeChange, session, onCreatorAuth }: NavbarProps) {
+export function Navbar({ mode, onModeChange, collection, onCollectionChange, theme, onThemeChange, session, onCreatorAuth }: NavbarProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuButton = useRef<HTMLButtonElement>(null);
   const activeMode = modes.find(item => item.id === mode)!;
@@ -48,7 +48,7 @@ export function Navbar({ mode, onModeChange, ageTier, onAgeTierChange, theme, on
       </button>
 
       <div className="header-tools">
-        <DropdownSelect className="age-dropdown" label="Listening age tier" eyebrow="Listening age" value={ageTier} options={ageOptions} onChange={onAgeTierChange} />
+        <DropdownSelect className="collection-dropdown" label="Story collection" eyebrow="Collection" value={collection} options={collectionOptions} onChange={onCollectionChange} />
         <button type="button" className="icon-button theme-toggle rounded-full transition-all duration-300" onClick={onThemeChange} aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`}>
           {theme === 'dark' ? <Sun size={19} /> : <Moon size={19} />}
         </button>
@@ -91,7 +91,7 @@ export function Navbar({ mode, onModeChange, ageTier, onAgeTierChange, theme, on
           </button>
         ))}
       </nav>
-      <span className="sr-only" role="status" aria-live="polite">{activeMode.label} selected. Listening age {ageTier.replace('-', '–')} years.</span>
+      <span className="sr-only" role="status" aria-live="polite">{activeMode.label} selected. Collection {collectionLabels[collection]}.</span>
     </header>
   );
 }

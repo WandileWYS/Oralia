@@ -1,11 +1,13 @@
 import { z } from 'zod';
 
-export const ageTiers = ['5-9', '10-13', '14-17', '18+'] as const;
-export const ageTierSchema = z.enum(ageTiers);
-export type AgeTier = z.infer<typeof ageTierSchema>;
-
-export const educationCollectionSchema = z.enum(['originals', 'west-africa', 'zulu', 'east-africa', 'southern-africa']);
-export type EducationCollection = z.infer<typeof educationCollectionSchema>;
+export const storyCollections = ['FOLK_AND_FABLE', 'EPIC_AND_CHRONICLE'] as const;
+export const storyCollectionSchema = z.enum(storyCollections);
+export type StoryCollection = z.infer<typeof storyCollectionSchema>;
+export type CollectionFilter = 'ALL' | StoryCollection;
+export const collectionLabels: Record<CollectionFilter, string> = { ALL: 'All Collections', FOLK_AND_FABLE: 'Folk & Fable', EPIC_AND_CHRONICLE: 'Epic & Chronicle' };
+export const collectionOptions = (['ALL', ...storyCollections] as const).map(value => ({ value, label: collectionLabels[value] }));
+export const regionTagSchema = z.enum(['originals', 'west-africa', 'zulu', 'east-africa', 'southern-africa']);
+export type RegionTag = z.infer<typeof regionTagSchema>;
 
 export const keyframeSchema = z.object({
   id: z.string().min(1), startTime: z.number().finite().nonnegative(),
@@ -31,11 +33,10 @@ export const audioTrackSchema = z.object({
   durationSeconds: z.number().positive(), language: z.string(), dialect: z.string().nullable(),
 });
 export type AudioTrack = z.infer<typeof audioTrackSchema>;
-export const storyVariantSchema = z.object({
-  ageTier: ageTierSchema, stylePreset: z.string(), styleLabel: z.string(),
-  contentRating: z.string(), reviewStatus: z.enum(['approved', 'pending']), keyframes: timelineSchema,
+export const storyPresentationSchema = z.object({
+  stylePreset: z.string(), styleLabel: z.string(), reviewStatus: z.enum(['approved', 'pending']), keyframes: timelineSchema,
 });
-export type StoryVariant = z.infer<typeof storyVariantSchema>;
+export type StoryPresentation = z.infer<typeof storyPresentationSchema>;
 export const storySchema = z.object({
   id: z.string(), title: z.string(), description: z.string(), creator: z.string(),
   creatorId: z.string().optional(), publishedAt: z.string().datetime().optional(),
@@ -43,19 +44,13 @@ export const storySchema = z.object({
   regionTag: z.string().optional(), sourceTitle: z.string().optional(), sourceUrl: z.string().url().optional(), culturalNote: z.string().optional(),
   voiceType: z.enum(['ORIGINAL', 'STUDIO_AI']).optional(), originalAudioUrl: z.string().nullable().optional(),
   category: z.string(), audio: audioTrackSchema,
-  educationCollection: educationCollectionSchema.optional(),
-  tierVariants: z.partialRecord(ageTierSchema, storyVariantSchema),
+  region: regionTagSchema.optional(),
+  collection: storyCollectionSchema, presentation: storyPresentationSchema,
 }).superRefine((story, context) => {
-  Object.entries(story.tierVariants).forEach(([tier, variant]) => {
-    if (!variant) return;
-    if (variant.ageTier !== tier) context.addIssue({ code: 'custom', path: ['tierVariants', tier], message: 'Variant age must match its tier key' });
-    const ids = new Set<string>();
-    variant.keyframes.forEach((frame, index) => {
-      if (ids.has(frame.id) || frame.endTime > story.audio.durationSeconds) {
-        context.addIssue({ code: 'custom', path: ['tierVariants', tier, 'keyframes', index], message: 'Frames need unique IDs and must fit the audio duration' });
-      }
-      ids.add(frame.id);
-    });
+  const ids = new Set<string>();
+  story.presentation.keyframes.forEach((frame, index) => {
+    if (ids.has(frame.id) || frame.endTime > story.audio.durationSeconds) context.addIssue({ code: 'custom', path: ['presentation', 'keyframes', index], message: 'Frames need unique IDs and must fit the audio duration' });
+    ids.add(frame.id);
   });
 });
 export type Story = z.infer<typeof storySchema>;
@@ -69,7 +64,7 @@ export interface CreatorAssetBundle {
   source?: { title: string; url: string; note: string };
   id: string;
   projectName: string;
-  ageTier: AgeTier;
+  collection: StoryCollection;
   pitch: string;
   frames: StoryboardFrame[];
   status: 'preview' | 'exported';

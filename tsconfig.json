@@ -16,5 +16,5 @@
     "noEmit": true,
     "types": ["vite/client", "node"]
   },
-  "include": ["src", "server", "prisma", "prisma.config.ts", "vite.config.ts"]
+  "include": ["src", "server", "api", "scripts", "prisma", "prisma.config.ts", "vite.config.ts"]
 }

@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { z } from 'zod';
-import { ageTierSchema, type Story, type StoryVariant } from '../types/story.ts';
+import { storyCollectionSchema, type Story, type StoryPresentation } from '../types/story.ts';
 import { creatorHref, getCreatorStories, getPlayableStories, parsePublicView, storyHref } from './catalog.ts';
 import { creatorEmailSchema } from '../types/creator.ts';
 import { resolveStorySourceUrl } from './sourceLinks.ts';
@@ -14,20 +14,9 @@ test('legacy chapter links resolve to verified anchors while other attribution s
   for (const url of [`${collection}#ch1`, `${collection}#ch20`, 'https://example.test/other-source#ch01']) assert.equal(resolveStorySourceUrl(url), url);
 });
 
-const variant: StoryVariant = { ageTier: '5-9', stylePreset: 'fairytale', styleLabel: 'Fairytale', contentRating: 'gentle', reviewStatus: 'approved', keyframes: [{ id: 'one', title: 'Scene one', startTime: 0, endTime: 5, imageUrl: '/image.svg', altText: 'A tree.', caption: 'A story.' }] };
-const story: Story = { id: 'one', title: 'Story one', description: '', creator: 'Same name', creatorId: 'creator-one', category: 'Fiction', publishedAt: '2026-11-05T10:00:00Z', audio: { id: 'audio', url: '/audio.wav', mimeType: 'audio/wav', durationSeconds: 5, language: 'en', dialect: null }, tierVariants: { '5-9': variant } };
-
-test('catalog and public profile use exact approved age variants and explicit creator identity', () => {
-  const pending = { ...story, id: 'pending', tierVariants: { '5-9': { ...variant, reviewStatus: 'pending' as const } } };
-  const other = { ...story, id: 'other', creatorId: 'creator-two' };
-  const draft = { ...story, id: 'draft', publishedAt: undefined };
-  const empty = { ...story, id: 'empty', tierVariants: { '5-9': { ...variant, keyframes: [] } } };
-  assert.equal(getPlayableStories([story, pending, empty], '5-9').length, 1);
-  assert.deepEqual(getPlayableStories([story], '18+'), []);
-  assert.deepEqual(getCreatorStories([story, other, pending, draft], 'creator-one', '5-9').map(entry => entry.story.id), ['one']);
-  assert.deepEqual(getCreatorStories([story], 'unknown', '5-9'), []);
-});
-
+const presentation: StoryPresentation = { stylePreset:'illustrated',styleLabel:'Fable',reviewStatus:'approved',keyframes:[{id:'one',startTime:0,endTime:5,imageUrl:'/image.svg',altText:'A tree.',caption:'Original words.'}] };
+const story: Story = { id:'one',title:'Story',description:'',creator:'Author',creatorId:'creator-one',publishedAt:'2026-11-05T10:00:00Z',collection:'FOLK_AND_FABLE',category:'Fable',region:'west-africa',audio:{id:'audio',url:'/audio.wav',mimeType:'audio/wav',durationSeconds:5,language:'en',dialect:null},presentation };
+test('collections intersect published creator ownership and review status',()=>{ const epic={...story,id:'epic',collection:'EPIC_AND_CHRONICLE' as const};const pending={...story,id:'pending',presentation:{...presentation,reviewStatus:'pending' as const}};const empty={...story,presentation:{...presentation,keyframes:[]}}; assert.equal(getPlayableStories([story,epic,pending,empty]).length,2); assert.deepEqual(getPlayableStories([story,epic],'FOLK_AND_FABLE').map(e=>e.story.id),['one']);assert.deepEqual(getCreatorStories([story,{...story,creatorId:'other'}],'creator-one').map(e=>e.story.id),['one']); });
 test('public story/profile URLs round-trip and malformed links fail safely', () => {
   assert.deepEqual(parsePublicView(storyHref('a story')), { kind: 'story', key: 'a story' });
   assert.deepEqual(parsePublicView(creatorHref('mirasol')), { kind: 'creator', key: 'mirasol' });
@@ -41,7 +30,7 @@ test('creator email is normalized and validated before requesting a challenge', 
 });
 
 test('every added story has distinct PCM narration and four measured captions matching its source text', () => {
-  const seeds = z.array(z.object({ id: z.string(), ageTier: ageTierSchema, scenes: z.array(z.object({ title: z.string(), text: z.string() })).length(4) })).parse(JSON.parse(readFileSync(new URL('../../prisma/content/stories.json', import.meta.url), 'utf8')));
+  const seeds = z.array(z.object({ id: z.string(), collection: storyCollectionSchema, scenes: z.array(z.object({ title: z.string(), text: z.string() })).length(4) })).parse(JSON.parse(readFileSync(new URL('../../prisma/content/stories.json', import.meta.url), 'utf8')));
   const audio = z.array(z.object({ id: z.string(), durationSeconds: z.number().positive(), cues: z.array(z.object({ title: z.string(), caption: z.string(), startTime: z.number(), endTime: z.number() })).length(4) })).parse(JSON.parse(readFileSync(new URL('../../prisma/content/narration.json', import.meta.url), 'utf8')));
   assert.equal(new Set(seeds.map(seed => seed.id)).size, 8);
   for (const seed of seeds) {
