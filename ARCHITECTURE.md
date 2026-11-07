@@ -65,7 +65,9 @@ The client fetches the full catalog for public-link resolution and filters brows
 
 ## Hosted runtime and data configuration
 
-Runtime and seed use PrismaLibSql with server-only TURSO_DATABASE_URL and TURSO_AUTH_TOKEN. Explicit file DATABASE_URL selects local development/test SQLite; it is rejected on Vercel. Prisma CLI schema operations retain a local SQLite datasource. Client construction is lazy, so packaging never queries a database. Vite middleware and the Vercel Node entrypoint delegate unchanged /api/v1 paths to handleApi. API code and generated Prisma remain outside the browser graph.
+Runtime and seed use PrismaLibSql with server-only TURSO_DATABASE_URL and TURSO_AUTH_TOKEN. Explicit file DATABASE_URL selects local development/test SQLite outside Vercel. Vercel requires both Turso values and ignores DATABASE_URL; it never falls back to SQLite. Prisma CLI schema operations retain a local SQLite datasource. Client construction is lazy, so packaging never queries a database. Successful construction is cached per warm runtime; failures remain retryable. Vite middleware and the Vercel Node entrypoint delegate unchanged /api/v1 paths to handleApi. API code and generated Prisma remain outside the browser graph.
+
+Configuration failures emit explicit server-only CRITICAL messages naming missing variables. Other initialization/query failures log only phases, safe categories and allowlisted provider/Prisma codes. Public API failures remain JSON 503 responses with a neutral retry message. No credentials, raw exceptions, SQL or connection strings enter logs or responses. Builds do not initialize the client or require cloud credentials.
 
 db:deploy:turso generates the current schema SQL, inspects remote structure, initializes only an empty database, verifies matching structures, and records an _oralia_schema checksum. It refuses unexpected structures or changed recorded checksums. Schema application and ledger insertion use one write batch. Existing migration SQL remains immutable; later schema changes require an explicit reviewed migration, not another initializer. Cloud seeds are idempotent and do not copy local sessions or accounts.
 

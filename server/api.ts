@@ -9,6 +9,7 @@ import { bundledMedia } from './mediaManifest.ts';
 import { presentationMode } from './environment.ts';
 import { keyframeImageRequestSchema, keyframeImageResponseSchema } from '../src/types/images.ts';
 import { fallbackImage } from './images.ts';
+import { reportDatabaseFailure } from './databaseDiagnostics.ts';
 
 class HttpError extends Error { status: number; constructor(status: number, message: string) { super(message); this.status = status; } }
 function send(response: ServerResponse, status: number, value: unknown) {
@@ -127,7 +128,8 @@ export async function handleApi(request: IncomingMessage, response: ServerRespon
     throw new HttpError(404, 'API route not found.');
   } catch (error) {
     const status = error instanceof HttpError ? error.status : error instanceof z.ZodError ? 400 : 503;
-    const message = error instanceof HttpError ? error.message : error instanceof z.ZodError ? 'Check your request values.' : 'The database is unavailable. Run the database setup and retry.';
+    if (status === 503) reportDatabaseFailure(error, 'query');
+    const message = error instanceof HttpError ? error.message : error instanceof z.ZodError ? 'Check your request values.' : 'The database is unavailable. Please retry shortly.';
     send(response, status, { error: message });
   }
 }

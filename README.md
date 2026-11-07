@@ -113,7 +113,7 @@ See [RESEARCH.md](RESEARCH.md), [ARCHITECTURE.md](ARCHITECTURE.md), and [AGENTS.
 
 ## Turso and Vercel
 
-Copy .env.example to ignored .env and set server-only TURSO_DATABASE_URL and TURSO_AUTH_TOKEN. Runtime and seed commands use Turso when these are configured. An explicit DATABASE_URL=file:./prisma/oralia.db selects local SQLite for development; Vercel rejects local database configuration. Never expose secrets through VITE_ variables.
+Copy .env.example to ignored .env and set server-only TURSO_DATABASE_URL and TURSO_AUTH_TOKEN. Runtime and seed commands use Turso when these are configured. An explicit DATABASE_URL=file:./prisma/oralia.db selects local SQLite outside Vercel. On Vercel, the two Turso variables are required and take precedence over any leftover DATABASE_URL; there is no SQLite fallback. Never expose secrets through VITE_ variables.
 
 The libSQL dependencies are already installed. Run npm run db:deploy:turso to inspect and initialize an empty remote schema or verify a compatible existing schema. This command generates SQL from Prisma, records its checksum, and refuses incompatible schemas without resetting data. Prisma CLI schema commands use local DATABASE_URL; prisma db push does not deploy the remote adapter. Local migration history remains unchanged.
 
@@ -126,3 +126,9 @@ PRESENTATION_MODE=true enables the explicitly labeled PIN simulator. It accepts 
 POST /api/v1/images/keyframe accepts an authenticated request with collection, sceneNumber (1–4) and prompt (1–2000 characters). It returns a bundled illustrative SVG, its MIME type/provenance and fallback reason. OPENAI_API_KEY and OPENAI_IMAGE_MODEL configure the server-only provider adapter; the demo endpoint still uses fallback even when a key exists. Public paid generation, durable generated asset storage and studio integration remain deferred. Existing storyboard and ZIP workflows are unchanged. See [OpenAI image generation](https://developers.openai.com/api/docs/guides/image-generation).
 
 Verification uses isolated SQLite for automated writes. Run npm test and npm run build; use npm run db:verify:turso for read-only remote catalog verification. A successful local build is not a published Vercel deployment.
+
+### Database connection troubleshooting
+
+Set TURSO_DATABASE_URL and TURSO_AUTH_TOKEN in the Vercel project's **Production** environment before redeploying. Preview deployments need their own matching environment configuration. Ignored local .env files are not uploaded, and changing a Vercel variable does not update an already running deployment; redeploy to apply it.
+
+Inspect serverless function logs for CRITICAL messages naming missing/empty variables or an invalid URL. Other failures log an initialization/query phase and allowlisted provider/Prisma codes, never token values, connection strings, raw errors or SQL. Authentication errors indicate credentials need checking; connectivity errors require checking service reachability; missing-table errors require verifying the selected database/schema. A generic public JSON 503 does not establish which of these occurred. Local verification cannot confirm the deployed environment without a live health/catalog check and function logs.
