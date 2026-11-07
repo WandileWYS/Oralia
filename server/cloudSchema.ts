@@ -22,6 +22,7 @@ async function fingerprint(client: Client, tables: string[]) {
   }
   return JSON.stringify(schema);
 }
+export { fingerprint as schemaFingerprint, tableNames as schemaTables };
 
 export async function deployCloudSchema(client: Client, sql: string) {
   const expected = createClient({ url: 'file::memory:' });

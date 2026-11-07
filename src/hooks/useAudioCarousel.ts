@@ -4,7 +4,7 @@ import { getActiveKeyframeIndex } from './timeline';
 import { usePlaybackSource } from './usePlaybackSource';
 
 export function useAudioCarousel(keyframes: readonly Keyframe[], sourceUrl: string) {
-  const source = usePlaybackSource(sourceUrl, keyframes.at(-1)?.endTime ?? 1);
+  const source = usePlaybackSource(sourceUrl);
   const audioRef = useRef<HTMLAudioElement>(null);
   const playRequest = useRef(0);
   const previousVolume = useRef(1);
@@ -50,7 +50,7 @@ export function useAudioCarousel(keyframes: readonly Keyframe[], sourceUrl: stri
     const pause = () => { sync(); stopLoop(); setIsBuffering(false); };
     const waiting = () => { sync(); setIsBuffering(!audio.paused && !audio.ended); stopLoop(); };
     const visibility = () => { sync(); resumeLoop(); };
-    const failure = () => { pause(); void source.fallback(); };
+    const failure = () => { pause(); source.failure(); };
     const timeEvents = ['timeupdate', 'loadedmetadata', 'durationchange', 'seeking', 'seeked', 'ratechange'] as const;
     timeEvents.forEach(event => audio.addEventListener(event, sync));
     audio.addEventListener('play', play);
@@ -80,7 +80,7 @@ export function useAudioCarousel(keyframes: readonly Keyframe[], sourceUrl: stri
       document.removeEventListener('visibilitychange', visibility);
       audio.pause();
     };
-  }, [keyframes, source.url, source.fallback]);
+  }, [keyframes, source.url, source.failure]);
 
   const togglePlay = useCallback(async () => {
     const audio = audioRef.current;
@@ -130,5 +130,5 @@ export function useAudioCarousel(keyframes: readonly Keyframe[], sourceUrl: stri
     setMuted(audio.muted);
   }, []);
 
-  return { audioRef, sourceUrl: source.url, mediaNotice: source.notice, sourcePending: source.pending, activeKeyframeIndex, isPlaying, isBuffering, currentTime, duration, error, togglePlay, seek, volume, isMuted: muted || volume === 0, changeVolume, toggleMute };
+  return { audioRef, sourceUrl: source.url, mediaNotice: source.notice, sourcePending: source.pending, retryPlayback: source.retry, activeKeyframeIndex, isPlaying, isBuffering, currentTime, duration, error, togglePlay, seek, volume, isMuted: muted || volume === 0, changeVolume, toggleMute };
 }

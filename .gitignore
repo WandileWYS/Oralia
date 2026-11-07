@@ -1,6 +1,9 @@
 node_modules/
 dist/
 .vercel/
+.nitro/
+.output/
+.workflow-data/
 *.local
 .env
 .env.*
@@ -9,3 +12,4 @@ dist/
 .qa/
 server/generated/
 prisma/*.db*
+/.swc

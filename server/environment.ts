@@ -36,5 +36,3 @@ export function resolveDatabaseConfig(env: NodeJS.ProcessEnv) {
   }
   return { url: 'file:./prisma/oralia.db' };
 }
-
-export const presentationMode = () => process.env.PRESENTATION_MODE === 'true';

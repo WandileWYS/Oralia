@@ -6,7 +6,7 @@ import type { CreatorProfile } from '../types/creator';
 import { useAudioCarousel } from '../hooks/useAudioCarousel';
 import { cn, formatTime } from '../lib/utils';
 import { CreatorByline } from './CreatorByline';
-import { CaptionTranscript, captionLanguages, type CaptionLanguage } from './CaptionTranscript';
+import { CaptionTranscript, captionLanguageLabel, type CaptionLanguage } from './CaptionTranscript';
 import { KeyframeTimeline } from './KeyframeTimeline';
 import { SceneThumbnail } from './SceneThumbnail';
 import { PlaybackWaveform } from './PlaybackWaveform';
@@ -16,7 +16,7 @@ import { useStoryBookmark } from '../hooks/useStoryBookmark';
 interface LoadedScene { url: string; alt: string; credit?: Keyframe['imageCredit'] }
 
 export function CarouselPlayer({ story, presentation, creator }: { story: Story; presentation: StoryPresentation; creator?: CreatorProfile }) {
-  const [voiceType, setVoiceType] = useState<'ORIGINAL' | 'STUDIO_AI'>(story.voiceType ?? 'STUDIO_AI');
+  const [voiceType, setVoiceType] = useState<'ORIGINAL' | 'STUDIO_AI'>(story.voiceType === 'ORIGINAL' && story.originalAudioUrl ? 'ORIGINAL' : 'STUDIO_AI');
   const sourceUrl = voiceType === 'ORIGINAL' ? story.originalAudioUrl ?? '' : story.audio.url;
   const player = useAudioCarousel(presentation.keyframes, sourceUrl);
   const frame = presentation.keyframes[player.activeKeyframeIndex];
@@ -26,25 +26,24 @@ export function CarouselPlayer({ story, presentation, creator }: { story: Story;
   const bookmark = useStoryBookmark(story.id);
   const captionOverlayId = useId();
   const [controlFeedback, setControlFeedback] = useState('');
-  const [captionLanguage, setCaptionLanguage] = useState<CaptionLanguage>('en');
+  const [captionLanguage, setCaptionLanguage] = useState<CaptionLanguage>(story.audio.language);
   const [dialectOverlay, setDialectOverlay] = useState(false);
 
   useEffect(() => {
     if (!frame) return;
     let cancelled = false;
     const image = new Image();
-    const load = (url: string, fallback = false) => {
+    const load = (url: string) => {
       image.onload = async () => {
         try { await image.decode(); } catch { /* A loaded image remains displayable without decode support. */ }
         if (cancelled) return;
-        const loaded = { url, alt: fallback ? `Scene: ${frame.title ?? story.title}` : frame.altText, credit: fallback ? undefined : frame.imageCredit };
+        const loaded = { url, alt: frame.altText, credit: frame.imageCredit };
         setImages(current => current.current?.url === url ? current : { previous: current.current, current: loaded });
-        setImageError(fallback);
+        setImageError(false);
       };
       image.onerror = () => {
         if (cancelled) return;
-        if (!fallback && frame.imageFallbackUrl) load(frame.imageFallbackUrl, true);
-        else setImageError(true);
+        setImageError(true);
       };
       image.src = url;
     };
@@ -71,7 +70,7 @@ export function CarouselPlayer({ story, presentation, creator }: { story: Story;
           <div className="viewport-top"><span className="glass-badge"><span className="status-dot" />ORALIA · SOURCED TALE</span><span className="glass-badge">{String(player.activeKeyframeIndex + 1).padStart(2, '0')} / {String(presentation.keyframes.length).padStart(2, '0')} scenes</span></div>
           {images.current?.credit && <a className="photo-credit" href={images.current.credit.sourceUrl} target="_blank" rel="noreferrer">Photo: {images.current.credit.photographer} / Unsplash</a>}
           {!player.isPlaying && <button type="button" className="viewport-play" disabled={player.sourcePending} aria-label={playLabel} onClick={() => void player.togglePlay()}><Play size={25} fill="currentColor" /></button>}
-          <div className="caption-area" id={captionOverlayId}>{captions && dialectOverlay && <span className="dialect-badge">{captionLanguages[captionLanguage]} · Adapted narration</span>}{captions && frame && <p className="read-along">{frame.caption}</p>}<span className="caption-language">ENGLISH AUDIO · {captions ? 'ADAPTATION CAPTIONS' : 'SUBTITLES OFF'}</span></div>
+          <div className="caption-area" id={captionOverlayId}>{captions && dialectOverlay && <span className="dialect-badge">{captionLanguageLabel(captionLanguage)} · Narration captions</span>}{captions && frame && <p className="read-along">{frame.caption}</p>}<span className="caption-language">{captionLanguageLabel(story.audio.language).toUpperCase()} AUDIO · {captions ? 'READ-ALONG CAPTIONS' : 'SUBTITLES OFF'}</span></div>
         </div>
         <div className="player-bottom">
           <div className="playback-row">
@@ -82,7 +81,7 @@ export function CarouselPlayer({ story, presentation, creator }: { story: Story;
           <KeyframeTimeline frames={presentation.keyframes} duration={player.duration} currentTime={player.currentTime} activeIndex={player.activeKeyframeIndex} onSeek={player.seek} />
           <div className="player-footer"><span className="playback-status" role="status">{player.isPlaying && !player.isBuffering ? <span className="mini-equalizer" aria-hidden="true"><i /><i /><i /></span> : <Headphones size={13} />}{playbackStatus}</span><button type="button" onClick={() => player.seek(0)} className="text-button restart-pill rounded-full"><RotateCcw size={12} />Start again</button></div>
           {controlFeedback && <p className="control-feedback" role="status">{controlFeedback}</p>}
-          {player.mediaNotice && <p className="helper-text" role="status">{player.mediaNotice}</p>}
+          {player.mediaNotice && <div role="status"><p className="helper-text">{player.mediaNotice}</p><button type="button" className="secondary-button" onClick={player.retryPlayback}>Retry narration</button></div>}
           {player.error && <p role="alert" className="error-message">{player.error}</p>}
           {imageError && <p role="status" className="helper-text">The scene photograph could not load. Narration and its aligned transcript continue.</p>}
         </div>
@@ -91,15 +90,15 @@ export function CarouselPlayer({ story, presentation, creator }: { story: Story;
       <aside className="story-details">
         <div className="flex items-center justify-between gap-3"><span className="eyebrow text-clay">FEATURED STORY</span><span className="outline-badge">{presentation.styleLabel}</span></div>
         <h2>{story.title}</h2><p className="story-description">{story.description}</p>
-        <div className="creator-line">{creator ? <CreatorByline creator={creator} /> : <strong>By {story.creator}</strong>}<span className="creator-voice-note">English adaptation · Studio narration</span></div>
-        <div className="story-tags"><span>English</span><span>{formatTime(story.audio.durationSeconds)} listen</span><span>{collectionLabels[story.collection]}</span></div>
-        <div className="recording-mode-switch story-voice-switch" role="group" aria-label="Story narration voice"><button type="button" aria-pressed={voiceType === 'ORIGINAL'} className={cn(voiceType === 'ORIGINAL' && 'selected')} onClick={() => setVoiceType('ORIGINAL')}>Original Author Voice</button><button type="button" aria-pressed={voiceType === 'STUDIO_AI'} className={cn(voiceType === 'STUDIO_AI' && 'selected')} onClick={() => setVoiceType('STUDIO_AI')}>Studio AI Voice</button></div>
-        {voiceType === 'ORIGINAL' && !story.originalAudioUrl && <p className="helper-text" role="status">No original microphone recording accompanies this adaptation. A quiet timing tone supports scene navigation. Choose Studio AI Voice for the spoken narration.</p>}
+        <div className="creator-line">{creator ? <CreatorByline creator={creator} /> : <strong>By {story.creator}</strong>}<span className="creator-voice-note">{story.audio.language} · AI studio narration</span></div>
+        <div className="story-tags"><span>{story.audio.language}</span><span>{formatTime(story.audio.durationSeconds)} listen</span><span>{collectionLabels[story.collection]}</span></div>
+        <div className="recording-mode-switch story-voice-switch" role="group" aria-label="Story narration voice"><button type="button" disabled={!story.originalAudioUrl} aria-pressed={voiceType === 'ORIGINAL'} className={cn(voiceType === 'ORIGINAL' && 'selected')} onClick={() => setVoiceType('ORIGINAL')}>Original Author Voice</button><button type="button" aria-pressed={voiceType === 'STUDIO_AI'} className={cn(voiceType === 'STUDIO_AI' && 'selected')} onClick={() => setVoiceType('STUDIO_AI')}>Studio AI Voice</button></div>
+        {voiceType === 'ORIGINAL' && !story.originalAudioUrl && <p className="helper-text" role="status">No original microphone recording accompanies this adaptation. Choose Studio AI Voice for the available narration.</p>}
         {story.quote && <blockquote>“{story.quote}”</blockquote>}
         <div className="story-actions"><button type="button" className={cn('secondary-button bookmark-button rounded-full transition-all duration-300', bookmark.saved && 'saved')} onClick={() => void bookmark.toggleSaved()} disabled={bookmark.busy} aria-busy={bookmark.busy} aria-pressed={bookmark.saved} title={bookmark.saved ? 'Remove this saved story' : 'Save this story'}>{bookmark.saved ? <Check size={16} /> : <Bookmark size={16} />}{bookmark.saved ? 'Saved to my stories' : 'Save to my stories'}</button><div className="scene-arrows"><button type="button" className="icon-button rounded-full" aria-label="Previous scene" disabled={player.activeKeyframeIndex <= 0 || !player.duration} onClick={() => jumpScene(-1)}><ArrowLeft size={18} /></button><button type="button" className="icon-button rounded-full" aria-label="Next scene" disabled={player.activeKeyframeIndex >= presentation.keyframes.length - 1 || !player.duration} onClick={() => jumpScene(1)}><ArrowRight size={18} /></button></div></div>
         {bookmark.message && <p className="bookmark-feedback" role="status">{bookmark.message}</p>}
-        <p className="demo-note">Scene photographs illustrate atmosphere rather than historical events.</p>
-        {story.sourceUrl && <div className="story-provenance"><a href={story.sourceUrl} target="_blank" rel="noreferrer">{story.sourceTitle}</a><p>{story.culturalNote}</p></div>}
+        <p className="source-note">Visuals illustrate the narrative; AI narration and imagery are identified in their source context.</p>
+        {story.culturalNote && <div className="story-provenance">{story.sourceUrl && <a href={story.sourceUrl} target="_blank" rel="noreferrer">{story.sourceTitle}</a>}<p>{story.culturalNote}</p></div>}
       </aside>
     </div>
     <section className="chapter-section" aria-label="Story chapters"><div className="section-heading"><div><span className="eyebrow">ONE VOICE, A WORLD OF IMAGINATION</span><h3>Inside the story</h3></div><span className="helper-text">Select a scene to jump in <ArrowRight size={14} /></span></div><div className="chapter-grid">{presentation.keyframes.map((cue, index) => <button type="button" key={cue.id} onClick={() => player.seek(cue.startTime)} disabled={!player.duration} className={cn('chapter-card transition-all duration-300 hover:scale-102 focus-visible:scale-102', player.activeKeyframeIndex === index && 'current')} aria-label={`Jump to ${cue.title ?? `Scene ${index + 1}`}`} aria-current={player.activeKeyframeIndex === index ? 'step' : undefined}><div><SceneThumbnail frame={cue} /><span>{formatTime(cue.startTime)}</span><i>{String(index + 1).padStart(2, '0')}</i></div><h4>{cue.title ?? `Scene ${index + 1}`}</h4><p>{index === player.activeKeyframeIndex ? 'Now in your story' : 'Listen to this scene'}</p></button>)}</div></section>

@@ -4,3 +4,6 @@
 prisma/*.db*
 .git
 .vercel
+.nitro
+.output
+.workflow-data

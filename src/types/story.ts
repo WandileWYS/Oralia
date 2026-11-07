@@ -15,7 +15,6 @@ export const keyframeSchema = z.object({
   caption: z.string(), altText: z.string(),
   title: z.string().optional(),
   thumbnailUrl: z.string().optional(),
-  imageFallbackUrl: z.string().optional(),
   imageMimeType: z.enum(['image/svg+xml', 'image/jpeg', 'image/png', 'image/webp']).optional(),
   imageCredit: z.object({ photographer: z.string(), sourceUrl: z.string().url() }).optional(),
 }).refine(frame => frame.endTime > frame.startTime, 'End must follow start');
@@ -54,19 +53,3 @@ export const storySchema = z.object({
   });
 });
 export type Story = z.infer<typeof storySchema>;
-
-export interface StoryboardFrame extends Keyframe {
-  prompt: string;
-}
-
-export interface CreatorAssetBundle {
-  voiceType?: 'ORIGINAL' | 'STUDIO_AI';
-  source?: { title: string; url: string; note: string };
-  id: string;
-  projectName: string;
-  collection: StoryCollection;
-  pitch: string;
-  frames: StoryboardFrame[];
-  status: 'preview' | 'exported';
-  notificationStatus: 'not-requested' | 'simulated';
-}

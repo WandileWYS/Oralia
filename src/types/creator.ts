@@ -9,8 +9,8 @@ export type CreatorProfile = z.infer<typeof creatorProfileSchema>;
 
 export const creatorEmailSchema = z.string().trim().toLowerCase().email().max(254);
 export const creatorSessionSchema = z.object({
-  kind: z.literal('simulated-otp'), email: creatorEmailSchema, displayName: z.string(),
-  id: z.string(), username: z.string(), avatarUrl: z.string(), token: z.string().min(32),
+  kind: z.literal('verified-email'), email: creatorEmailSchema, displayName: z.string(),
+  id: z.string(), username: z.string(), avatarUrl: z.string(),
   expiresAt: z.string().datetime(), preferredVoiceType: z.enum(['ORIGINAL', 'STUDIO_AI']),
 });
 export type CreatorSession = z.infer<typeof creatorSessionSchema>;

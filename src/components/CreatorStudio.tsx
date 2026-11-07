@@ -1,159 +1,74 @@
-import { useEffect, useState } from 'react';
-import { AudioLines, BrainCircuit, Check, FileArchive, ImagePlus, LoaderCircle, Mic, Sparkles, Square, Upload } from 'lucide-react';
-import type { StoryCollection, CreatorAssetBundle, Story } from '../types/story';
+import { useEffect, useRef, useState } from 'react';
+import { Check, FileArchive, LoaderCircle, Mic, RefreshCw, Sparkles, Square, Upload } from 'lucide-react';
+import type { StoryCollection } from '../types/story';
+import { collectionLabels, regionTagSchema, storyCollections, type RegionTag } from '../types/story';
 import type { CreatorSession } from '../types/creator';
-import { collectionStyles } from '../data/presentation';
+import { exportSchema, type CreationJob, type PolishedPlan } from '../types/creation';
+import type { z } from 'zod';
 import { api } from '../lib/api';
-import { changeFrameDuration, moveFrame, retimeFrames } from '../lib/storyboard';
-import { cn, formatTime } from '../lib/utils';
-import { useStudioRecording, type RecordingMode } from '../hooks/useStudioRecording';
-import { AnimatedWaveform } from './AnimatedWaveform';
-import { StoryboardEditor } from './StoryboardEditor';
-import { ExportModal } from './ExportModal';
-import { NeuralButton } from './NeuralButton';
-import { StoryboardPreviewModal } from './StoryboardPreviewModal';
-import { SceneThumbnail } from './SceneThumbnail';
-import { DropdownSelect } from './DropdownSelect';
-import { collectionLabels, storyCollections } from '../types/story';
+import { useStudioRecording } from '../hooks/useStudioRecording';
 import { AudioDraftPlayer } from './AudioDraftPlayer';
+import { DropdownSelect } from './DropdownSelect';
+import { NeuralButton } from './NeuralButton';
+import { formatTime } from '../lib/utils';
 
-export function CreatorStudio({ collection, stories, session, onSessionChange }: { collection: StoryCollection; stories: readonly Story[]; session: CreatorSession; onSessionChange: (session: CreatorSession) => void }) {
-  const [productionCollection, setProductionCollection] = useState<StoryCollection>(collection);
-  const templateStory = stories.find(story => story.collection === productionCollection && story.presentation.reviewStatus === 'approved' && story.presentation.keyframes.length) ?? null;
-  const [pitch, setPitch] = useState('');
-  const [recordingMode, setRecordingMode] = useState<RecordingMode>('demo');
-  const [error, setError] = useState('');
-  const [notice, setNotice] = useState('');
-  const [bundle, setBundle] = useState<CreatorAssetBundle | null>(null);
-  const [modal, setModal] = useState<'storyboard' | 'export' | null>(null);
-  const [previewStage, setPreviewStage] = useState(0);
-  const capture = useStudioRecording({ url: templateStory?.audio.url ?? '', name: templateStory?.title ?? 'story' });
-  const presentation = templateStory?.presentation;
-  const [voiceBusy, setVoiceBusy] = useState(false);
-  const chooseVoice = async (voiceType: 'ORIGINAL' | 'STUDIO_AI') => {
-    setVoiceBusy(true); setError('');
-    try { const next = await api.voice(voiceType); onSessionChange(next); setBundle(current => current ? { ...current, voiceType } : null); setNotice(`${voiceType === 'ORIGINAL' ? 'Original Phone Mic Audio' : 'Studio AI Synthesized Voice'} preference saved.`); }
-    catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not save voice preference.'); }
-    finally { setVoiceBusy(false); }
-  };
-  const recording = capture.phase === 'recording';
-  const requesting = capture.phase === 'requesting';
-  const previewBusy = modal === 'storyboard' && previewStage < 3;
-
-  useEffect(() => { setBundle(null); setModal(null); setNotice(''); }, [productionCollection]);
-  useEffect(() => { setBundle(null); setNotice(''); }, [capture.draft]);
-  useEffect(() => {
-    if (modal !== 'storyboard') return;
-    const timers = [
-      window.setTimeout(() => setPreviewStage(1), 350),
-      window.setTimeout(() => setPreviewStage(2), 700),
-      window.setTimeout(() => { setPreviewStage(3); setNotice('Simulated storyboard ready. Your pitch and current scene edits are included in the JSON preview.'); }, 1100),
-    ];
-    return () => timers.forEach(timer => window.clearTimeout(timer));
-  }, [modal]);
-
-  const ensureBundle = () => {
-    setError(''); setNotice(''); capture.clearError();
-    if (!presentation || !templateStory) { setError('No published storyboard is available in this collection.'); return null; }
-    if (!capture.draft && pitch.trim().length < 10) {
-      setError('Add a short pitch of at least 10 characters or attach audio.'); return null;
-    }
-    // Existing edits belong to this pitch/value and survive reopening either preview.
-    if (bundle) return bundle;
-    const frames = retimeFrames(presentation.keyframes.map(frame => ({
-      ...frame,
-      prompt: `${frame.altText} Style: ${collectionStyles[productionCollection].theme}. Preserve character continuity and avoid embedded text.`,
-    })));
-    const next: CreatorAssetBundle = {
-      id: crypto.randomUUID(), projectName: 'My story concept', collection: productionCollection, pitch: pitch.trim(), voiceType: session.preferredVoiceType,
-      source: templateStory.sourceUrl ? { title: templateStory.sourceTitle ?? templateStory.title, url: templateStory.sourceUrl, note: templateStory.culturalNote ?? '' } : undefined,
-      frames, status: 'preview', notificationStatus: 'not-requested',
-    };
-    setBundle(next);
-    return next;
-  };
-  const preview = () => {
-    if (!ensureBundle()) return;
-    capture.playback.current?.pause();
-    setPreviewStage(0); setModal('storyboard');
-  };
-  const inspectExport = () => {
-    if (!ensureBundle()) return;
-    capture.playback.current?.pause();
-    setModal('export');
-  };
-  const updateFrames = (frames: CreatorAssetBundle['frames']) => {
-    setBundle(current => current ? { ...current, frames, status: 'preview', notificationStatus: 'not-requested' } : null);
-    setNotice('');
-  };
-
+export function CreatorStudio({collection,session,onPublished}:{collection:StoryCollection;session:CreatorSession;onPublished:()=>void}){
+  const [productionCollection,setCollection]=useState(collection);const [region,setRegion]=useState<RegionTag>('originals');const [title,setTitle]=useState('');const [text,setText]=useState('');const [provenance,setProvenance]=useState('');const [language,setLanguage]=useState('en');
+  const [jobs,setJobs]=useState<CreationJob[]>([]);const [job,setJob]=useState<CreationJob|null>(null);const [plan,setPlan]=useState<PolishedPlan|null>(null);const [busy,setBusy]=useState(false);const [error,setError]=useState('');const [notice,setNotice]=useState('');const [reviewed,setReviewed]=useState(false);const [archive,setArchive]=useState<z.infer<typeof exportSchema>|null>(null);
+  const capture=useStudioRecording();const requestKey=useRef(crypto.randomUUID());const loadKey=useRef('');
+  const narration=useRef<HTMLAudioElement>(null);const [narrationPlaying,setNarrationPlaying]=useState(false);
+  useEffect(()=>{requestKey.current=crypto.randomUUID();},[title,text,productionCollection,region,provenance,language,capture.draft]);
+  const loadJobs=()=>api.jobs().then(result=>setJobs(result.jobs));
+  useEffect(()=>{void loadJobs().catch(reason=>setError(reason instanceof Error?reason.message:'Could not load your creations.'));},[]);
+  useEffect(()=>{if(!job||!['QUEUED','RUNNING'].includes(job.status)&&job.stage!=='publishing')return;let active=true;const timer=window.setInterval(()=>{void api.job(job.id).then(next=>{if(!active)return;setJob(next);if(next.stage==='published'){onPublished();setNotice('Your story is published in Vellum.');}}).catch(reason=>{if(active)setError(reason instanceof Error?reason.message:'Status could not refresh.');});},3000);return()=>{active=false;clearInterval(timer);};},[job?.id,job?.status,job?.stage,onPublished]);
+  useEffect(()=>{if(job?.plan&&loadKey.current!==job.id){loadKey.current=job.id;setPlan(job.plan);setReviewed(false);}},[job]);
+  useEffect(()=>{if(!archive||archive.status==='FAILED'||archive.status==='READY'&&!['QUEUED','SENDING'].includes(archive.notificationStatus))return;const timer=setInterval(()=>{void api.export(archive.id).then(setArchive).catch(reason=>setError(reason instanceof Error?reason.message:'Export could not refresh.'));},3000);return()=>clearInterval(timer);},[archive?.id,archive?.status,archive?.notificationStatus]);
+  useEffect(()=>{const id=new URLSearchParams(location.search).get('export');if(id)void api.export(id).then(setArchive).catch(reason=>setError(reason instanceof Error?reason.message:'Export could not load.'));},[]);
+  const act=async(action:()=>Promise<void>)=>{setBusy(true);setError('');setNotice('');try{await action();}catch(reason){setError(reason instanceof Error?reason.message:'The operation failed.');}finally{setBusy(false);}};
+  const selectJob=(value:CreationJob)=>{loadKey.current='';setJob(value);setArchive(null);setPlan(value.plan);setReviewed(false);};
+  const submit=()=>void act(async()=>{
+    const uploaded=capture.draft?await api.upload(capture.draft.blob):null;
+    const input={title,collection:productionCollection,region,provenance,language,...(uploaded?{sourceAssetId:uploaded.assetId}:{text})};
+    const next=await api.create(input,requestKey.current);selectJob(next);await loadJobs();setNotice('Creation saved. Processing continues on the server.');
+  });
+  const move=(index:number,direction:number)=>{if(!plan)return;const scenes=[...plan.scenes];const target=index+direction;if(target<0||target>=scenes.length)return;[scenes[index],scenes[target]]=[scenes[target],scenes[index]];const ordered=scenes.map((scene,i)=>({...scene,proposedStartSeconds:i*6}));setPlan({scenes:ordered,polishedText:ordered.map(scene=>scene.narration).join('\n\n')});setReviewed(false);};
+  const edit=(index:number,field:'narration'|'imagePrompt',value:string)=>{if(!plan)return;const scenes=plan.scenes.map((scene,i)=>i===index?{...scene,[field]:value}:scene);setPlan({scenes,polishedText:scenes.map(scene=>scene.narration).join('\n\n')});setReviewed(false);};
+  const dirty=!!plan&&!!job?.plan&&JSON.stringify(plan)!==JSON.stringify(job.plan);
   return <section className="creator-studio" aria-label="Creator Studio">
-    <div className="page-intro">
-      <div><span className="eyebrow text-clay">THE CREATOR'S TABLE</span><h1>Speak a world<br /><em>into possibility.</em></h1><p>Start with your voice. Leave with the beginnings of something big.</p></div>
-      <div className="intro-note"><Sparkles size={25} /><p>From a spark of an idea<br />to a world you can see.</p></div>
-    </div>
-
-    <div className="studio-collection-selector"><DropdownSelect label="Production collection" value={productionCollection} options={storyCollections.map(value => ({value, label: collectionLabels[value]}))} onChange={setProductionCollection} /></div>
+    <div className="page-intro"><div><span className="eyebrow text-clay">THE CREATOR’S TABLE</span><h1>Your voice.<br/><em>A world of stories.</em></h1><p>Verified creator @{session.username}. Real transcription, illustration, and AI narration.</p></div></div>
     <div className="studio-layout">
-      <section className="voice-safeguard panel" aria-label="Voice Quality Safeguard"><h2>Voice Quality Safeguard</h2><p className="helper-text">Keep your phone microphone recording or choose studio synthesis for your production plan. This selection is saved to your account; generation is a separate workflow.</p><div className="recording-mode-switch" role="group" aria-label="Narration production voice"><button type="button" disabled={voiceBusy} aria-pressed={session.preferredVoiceType === 'ORIGINAL'} className={cn(session.preferredVoiceType === 'ORIGINAL' && 'selected')} onClick={() => void chooseVoice('ORIGINAL')}>Original Phone Mic Audio</button><button type="button" disabled={voiceBusy} aria-pressed={session.preferredVoiceType === 'STUDIO_AI'} className={cn(session.preferredVoiceType === 'STUDIO_AI' && 'selected')} onClick={() => void chooseVoice('STUDIO_AI')}>Studio AI Synthesized Voice</button></div></section>
-      <section className="studio-input panel">
-        <div className="section-heading"><h2>Your story starts here</h2><span className="outline-badge">01 / THE PITCH</span></div>
-        <p className="helper-text">Tell us about a character, a place, or an idea you can't stop thinking about.</p>
-        <div className="record-zone">
-          <div className="recording-mode-switch rounded-full" role="group" aria-label="Recording mode">
-            <button type="button" aria-pressed={recordingMode === 'demo'} disabled={recording || requesting} className={cn(recordingMode === 'demo' && 'selected')} onClick={() => setRecordingMode('demo')}><Sparkles size={13} />Demo</button>
-            <button type="button" aria-pressed={recordingMode === 'microphone'} disabled={recording || requesting} className={cn(recordingMode === 'microphone' && 'selected')} onClick={() => setRecordingMode('microphone')}><Mic size={13} />Microphone</button>
-          </div>
-          <div className={cn('mic-circle', recording && 'recording')}><AudioLines size={34} /></div>
-          <strong>{recording ? recordingMode === 'demo' ? 'Your demo session is rolling…' : 'Listening to your idea…' : 'A whole world, in your own words.'}</strong>
-          <p>{recordingMode === 'demo' ? 'Microphone-free simulation with sample audio playback.' : 'Your microphone recording stays in this browser session.'}</p>
-          <div className="recording-status-row"><span className={cn('recording-status', recording && 'active')} role="status"><i />{recording ? recordingMode === 'demo' ? 'Demo recording' : 'Recording' : capture.phase === 'ready' ? 'Ready to play back' : 'Ready to record'}</span><time aria-label="Recording duration">{formatTime(capture.elapsedSeconds)}</time></div>
-          <AnimatedWaveform active={recording || capture.isPlaying} />
-          <button type="button" className="primary-button rounded-full transition-all duration-300" disabled={requesting} onClick={() => { setNotice(''); setError(''); if (recording) capture.stop(); else void capture.start(recordingMode); }}>
-            {recording ? <Square size={15} fill="currentColor" /> : requesting ? <LoaderCircle size={17} className="animate-spin" /> : <Mic size={17} />}
-            {recording ? 'Stop recording' : requesting ? 'Opening microphone…' : 'Record your pitch'}
-          </button>
-          <label className="upload-label rounded-full transition-all duration-300"><Upload size={13} />or upload an audio file<input className="sr-only" type="file" accept="audio/*" disabled={recording || requesting} onChange={event => { const file = event.target.files?.[0]; if (file) capture.upload(file); event.target.value = ''; }} /></label>
+      <section className="studio-input panel"><div className="section-heading"><h2>Create a story</h2><span className="outline-badge">01 / YOUR SOURCE</span></div>
+        <label className="field-label" htmlFor="story-title">Story title</label><input id="story-title" className="rounded-2xl project-name-input" maxLength={100} value={title} onChange={event=>{setTitle(event.target.value);requestKey.current=crypto.randomUUID();}}/>
+        <DropdownSelect label="Production collection" value={productionCollection} options={storyCollections.map(value=>({value,label:collectionLabels[value]}))} onChange={setCollection}/>
+        <DropdownSelect label="Region or tradition" value={region} options={regionTagSchema.options.map(value=>({value,label:value==='originals'?'Original narrative':value.replaceAll('-',' ')}))} onChange={setRegion}/>
+        <label className="field-label" htmlFor="story-language">Narration language</label><input id="story-language" className="rounded-2xl project-name-input" value={language} maxLength={30} onChange={event=>setLanguage(event.target.value)}/>
+        <div className="record-zone"><strong>Record your story</strong><p>Up to five minutes / 20 MB. Your recording is uploaded only when you start creation.</p><div className="recording-status-row"><span>{capture.phase==='recording'?'Recording live':capture.phase==='requesting'?'Opening microphone':'Microphone ready'}</span><time>{formatTime(capture.elapsedSeconds)}</time></div>
+          <div className="microphone-level" role="meter" aria-label="Live microphone input" aria-valuenow={Math.round(capture.level*100)} aria-valuemin={0} aria-valuemax={100}><span style={{width:`${capture.level*100}%`}}/></div>
+          <button type="button" className="primary-button rounded-full" disabled={busy||capture.phase==='requesting'} onClick={()=>capture.phase==='recording'?capture.stop():void capture.start()}>{capture.phase==='recording'?<Square size={16}/>:<Mic size={16}/>} {capture.phase==='recording'?'Stop recording':'Record your story'}</button>
+          <label className="upload-label rounded-full"><Upload size={15}/>Upload audio<input className="sr-only" type="file" accept="audio/*" disabled={busy||capture.phase==='recording'} onChange={event=>{const file=event.target.files?.[0];if(file)capture.upload(file);event.target.value='';}}/></label>
         </div>
-
-        {capture.draft && <div className="audio-draft rounded-2xl">
-          <span><Check size={14} />{capture.draft.name}</span>
-          <AudioDraftPlayer key={capture.draft.url} audioRef={capture.playback} url={capture.draft.url} isPlaying={capture.isPlaying} onPlayingChange={capture.setIsPlaying} onError={capture.playbackError} />
-          <button type="button" className="text-button remove-recording rounded-full" onClick={capture.remove}>Remove recording</button>
-        </div>}
-        {capture.notice && <p className="recorder-notice" role="status">{capture.notice}</p>}
-        {capture.error && <p className="error-message" role="alert">{capture.error}</p>}
-
-        <label className="field-label" htmlFor="pitch">Or put your idea into words</label>
-        <textarea id="pitch" className="rounded-2xl" rows={5} maxLength={5000} value={pitch} onChange={event => { setPitch(event.target.value); setBundle(null); setNotice(''); }} placeholder="Imagine a world where…" />
-        <div className="studio-input-footer">
-          <span className="helper-text">{collectionStyles[productionCollection].theme} · {collectionLabels[productionCollection]}</span>
-          <NeuralButton icon={<BrainCircuit size={17} />} busy={previewBusy} disabled={recording || requesting} aria-haspopup="dialog" aria-expanded={modal === 'storyboard'} onClick={preview}>{previewBusy ? 'Preparing storyboard…' : 'Preview storyboard'}</NeuralButton>
-        </div>
-        <p className="ai-workflow-note"><Sparkles size={12} />AI workflow simulation · assembled locally</p>
+        {capture.draft&&<div className="audio-draft rounded-2xl"><strong>{capture.draft.name}</strong><AudioDraftPlayer audioRef={capture.playback} url={capture.draft.url} isPlaying={capture.isPlaying} onPlayingChange={capture.setIsPlaying} onError={capture.playbackError}/><button className="text-button" type="button" onClick={capture.remove}>Remove recording</button></div>}
+        {capture.error&&<p role="alert" className="error-message">{capture.error}</p>}
+        <label className="field-label" htmlFor="story-input">Or write your story</label><textarea id="story-input" className="rounded-2xl" rows={7} maxLength={5000} disabled={!!capture.draft} value={text} onChange={event=>{setText(event.target.value);requestKey.current=crypto.randomUUID();}}/>
+        <label className="field-label" htmlFor="story-provenance">Source, cultural context, and permission</label><textarea id="story-provenance" className="rounded-2xl" rows={3} maxLength={1000} value={provenance} onChange={event=>setProvenance(event.target.value)}/>
+        <p className="helper-text">Confirm you have permission to submit this recording or text. Narration will be synthesized from the polished version; the original recording stays private.</p>
+        <NeuralButton icon={<Sparkles size={16}/>} busy={busy} disabled={capture.phase==='recording'||capture.phase==='requesting'||!title.trim()||!provenance.trim()||(!capture.draft&&!text.trim())} onClick={submit}>Generate illustrated story</NeuralButton>
       </section>
-
-      <section className="studio-preview panel">
-        <div className="section-heading"><h2>A first look at your world</h2><span className="outline-badge">02 / THE STORYBOARD</span></div>
-        <p className="helper-text">{bundle ? 'Reorder scenes, set durations, and refine each image prompt.' : `Use the database storyboard “${templateStory?.title ?? 'story'}” as your editing starting point.`}</p>
-        {bundle ? <>
-          <label className="field-label" htmlFor="project-name">Project name</label>
-          <input className="project-name-input rounded-2xl" id="project-name" maxLength={100} value={bundle.projectName} onChange={event => setBundle({ ...bundle, projectName: event.target.value, status: 'preview' })} />
-          <StoryboardEditor frames={bundle.frames} onMove={(id, offset) => updateFrames(moveFrame(bundle.frames, id, offset))} onDuration={(id, seconds) => updateFrames(changeFrameDuration(bundle.frames, id, seconds))} onPrompt={(id, prompt) => updateFrames(bundle.frames.map(frame => frame.id === id ? { ...frame, prompt } : frame))} />
-          <div className="storyboard-summary"><span>{bundle.frames.length} scenes</span><strong>{bundle.frames.at(-1)?.endTime.toFixed(1)}s edited timeline</strong></div>
-        </> : <div className="storyboard-grid">{(presentation?.keyframes ?? []).map((frame, index) => <figure key={frame.id}><SceneThumbnail frame={frame} alt={frame.altText} /><figcaption><span>SCENE {String(index + 1).padStart(2, '0')}</span>{frame.title}</figcaption></figure>)}</div>}
-        <div className="studio-info"><ImagePlus size={18} /><p><strong>Room for your imagination.</strong> Edits are included in your JSON and export. These credited photographs come from the source storyboard; AI regeneration and real email are future integrations.</p></div>
-        <NeuralButton className="export-button" icon={<FileArchive size={17} />} disabled={recording || requesting} data-active={modal === 'export'} aria-haspopup="dialog" aria-expanded={modal === 'export'} onClick={inspectExport}>Export & Email Asset Package</NeuralButton>
-        <p className="helper-text export-helper">Opens your JSON payload. ZIP download works; email is simulated.</p>
+      <section className="studio-preview panel"><div className="section-heading"><h2>Your creations</h2><button className="icon-button" aria-label="Refresh creations" onClick={()=>void act(loadJobs)}><RefreshCw size={17}/></button></div>
+        {!jobs.length&&<p className="helper-text">Your persisted creations will appear here.</p>}
+        <div className="creation-list">{jobs.map(item=><button type="button" className="secondary-button rounded-full" key={item.id} aria-pressed={job?.id===item.id} onClick={()=>selectJob(item)}>Version {item.version} · {item.status.toLowerCase().replaceAll('_',' ')}</button>)}</div>
+        {job&&<><div className="notice" role="status"><strong>{job.status.toLowerCase().replaceAll('_',' ')}</strong><p>{job.stage}{job.errorCode?` · ${job.errorCode}`:''}</p>{['QUEUED','RUNNING'].includes(job.status)&&<LoaderCircle size={18} className="animate-spin"/>}<button type="button" className="secondary-button" disabled={busy} onClick={()=>void act(async()=>{setJob(await api.job(job.id));})}>Refresh creation</button></div>
+          {job.status==='INDETERMINATE'&&<p className="error-message">A paid provider result could not be confirmed. Check the retained assets before explicitly creating another version; regeneration can incur additional charges.</p>}
+          {job.status==='INDETERMINATE'&&plan&&<NeuralButton icon={<Sparkles size={16}/>} busy={busy} onClick={()=>void act(async()=>{selectJob(await api.revise(job.id,plan,crypto.randomUUID()));await loadJobs();})}>Start a new paid version</NeuralButton>}
+          {job.retryable&&job.status==='FAILED'&&<button className="secondary-button" onClick={()=>void act(async()=>{setJob(await api.retry(job.id));})}>Retry failed processing</button>}
+          {job.transcript&&<details className="rounded-2xl"><summary>Original transcript</summary><p>{job.transcript}</p></details>}
+          {job.audioUrl&&<div className="production-audio"><p className="helper-text">AI-generated narration · review before publishing</p><AudioDraftPlayer audioRef={narration} url={job.audioUrl} isPlaying={narrationPlaying} onPlayingChange={setNarrationPlaying} onError={()=>setError('Narration could not load. Refresh the creation to renew access.')}/></div>}
+          {plan&&<div className="production-scenes">{plan.scenes.map((scene,index)=><article className="panel rounded-2xl" key={index}>{job.preview.find(image=>image.sceneNumber===index+1)&&<img className="rounded-2xl" src={job.preview.find(image=>image.sceneNumber===index+1)!.imageUrl} alt={scene.title}/>}<h3>{String(index+1).padStart(2,'0')} · {scene.title}</h3><div className="scene-reorder"><button type="button" className="secondary-button" disabled={index===0} onClick={()=>move(index,-1)}>Move earlier</button><button type="button" className="secondary-button" disabled={index===3} onClick={()=>move(index,1)}>Move later</button></div><label className="field-label">Scene narration<textarea rows={4} maxLength={2000} className="rounded-2xl" value={scene.narration} onChange={event=>edit(index,'narration',event.target.value)}/></label><label className="field-label">Image prompt<textarea rows={3} maxLength={2000} className="rounded-2xl" value={scene.imagePrompt} onChange={event=>edit(index,'imagePrompt',event.target.value)}/></label></article>)}</div>}
+          {plan&&dirty&&<NeuralButton icon={<Sparkles size={16}/>} busy={busy} onClick={()=>void act(async()=>{selectJob(await api.revise(job.id,plan,crypto.randomUUID()));await loadJobs();})}>Generate new version from edits</NeuralButton>}
+          {job.versionId&&job.status==='REVIEW_READY'&&<><label className="review-confirmation"><input type="checkbox" checked={reviewed&&!dirty} disabled={dirty} onChange={event=>setReviewed(event.target.checked)}/>I reviewed all narration, images, and cultural context, and have permission to publish.</label><NeuralButton icon={<Check size={16}/>} disabled={busy||!reviewed||dirty||job.stage==='publishing'} busy={busy} onClick={()=>void act(async()=>{await api.publish(job.versionId!);setJob({...job,stage:'publishing'});setNotice('Publication started. Your story appears after all assets are ready.');})}>Publish to Vellum</NeuralButton><NeuralButton icon={<FileArchive size={16}/>} disabled={busy||dirty} onClick={()=>void act(async()=>{setArchive(await api.createExport(job.versionId!));})}>Export & email asset package</NeuralButton></>}
+        </>}
+        {archive&&<div className="notice" role="status"><strong>Asset package · {archive.status.toLowerCase()}</strong><p>Email: {archive.notificationStatus.toLowerCase()}{archive.errorCode?` · ${archive.errorCode}`:''}</p>{archive.status==='READY'&&<a className="primary-button rounded-full" href={`/api/v1/exports/${encodeURIComponent(archive.id)}/download`}>Download ZIP</a>}{archive.notificationStatus==='FAILED'&&<button type="button" className="secondary-button" onClick={()=>void act(async()=>{await api.notifyExport(archive.id);setArchive({...archive,notificationStatus:'QUEUED'});})}>Retry email only</button>}</div>}
       </section>
-    </div>
-
-    {error && <p className="notice error-message" role="alert">{error}</p>}
-    {notice && <p className="notice success-message" role="status"><Check size={17} />{notice}</p>}
-    {modal === 'storyboard' && bundle && <StoryboardPreviewModal bundle={bundle} stage={previewStage} onClose={() => setModal(null)} onExport={() => setModal('export')} />}
-    {modal === 'export' && bundle && <ExportModal bundle={bundle} onClose={() => setModal(null)} onExported={email => {
-      setBundle(current => current ? { ...current, status: 'exported', notificationStatus: email ? 'simulated' : 'not-requested' } : null);
-      setNotice(email ? `Asset ZIP downloaded. Email notification to ${email} simulated; no email was sent.` : 'Asset ZIP downloaded with your edited scene order, prompts, and durations.');
-    }} />}
+    </div>{error&&<p className="notice error-message" role="alert">{error}</p>}{notice&&<p className="notice success-message" role="status">{notice}</p>}
   </section>;
 }

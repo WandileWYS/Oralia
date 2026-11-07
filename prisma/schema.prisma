@@ -31,6 +31,11 @@ model User {
   bio                String
   role               Role       @default(READER)
   preferredVoiceType VoiceType  @default(ORIGINAL)
+  emailVerifiedAt    DateTime?
+  creationJobs       CreationJob[]
+  versions           StoryVersion[]
+  assets             MediaAsset[]
+  exports            StoryExport[]
   stories            Story[]
   bookmarks          Bookmark[]
   sessions           Session[]
@@ -53,6 +58,9 @@ model Story {
   culturalNote     String
   featured         Boolean         @default(false)
   publishedAt      DateTime        @default(now())
+  versionId        String?         @unique
+  provenance       String          @default("LEGACY_EDITORIAL")
+  language         String          @default("en")
   scenes           KeyframeScene[]
   bookmarks        Bookmark[]
 
@@ -90,6 +98,11 @@ model OtpChallenge {
   email     String
   expiresAt DateTime
   used      Boolean  @default(false)
+  codeHash  String
+  attempts  Int      @default(0)
+  sentAt    DateTime?
+  createdAt DateTime @default(now())
+  @@index([email, createdAt])
 }
 
 model Session {
@@ -97,4 +110,84 @@ model Session {
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   expiresAt DateTime
+  verified  Boolean  @default(true)
+}
+
+model AuthRateLimit {
+  key       String @id
+  count     Int
+  resetAt   DateTime
+}
+
+model CreationJob {
+  id             String   @id @default(cuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  storyId        String
+  version        Int      @default(1)
+  requestKey     String
+  inputJson      String
+  transcript     String?
+  planJson       String?
+  status         String   @default("QUEUED")
+  stage          String   @default("queued")
+  errorCode      String?
+  retryable      Boolean  @default(false)
+  workflowRunId  String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  assets         MediaAsset[]
+  @@unique([userId, requestKey])
+  @@unique([storyId, version])
+  @@index([userId, createdAt])
+}
+
+model MediaAsset {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  jobId         String?
+  job           CreationJob? @relation(fields: [jobId], references: [id], onDelete: Restrict)
+  slot          String
+  publicId      String   @unique
+  assetId       String?
+  resourceType  String
+  deliveryType  String   @default("authenticated")
+  format        String?
+  mimeType      String?
+  bytes         Int?
+  duration      Float?
+  sampleCount   Int?
+  checksum      String?
+  status        String   @default("RESERVED")
+  createdAt     DateTime @default(now())
+  @@unique([jobId, slot])
+}
+
+model StoryVersion {
+  id          String   @id @default(cuid())
+  storyId     String
+  number      Int
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  jobId       String   @unique
+  snapshotJson String
+  createdAt   DateTime @default(now())
+  publishedAt DateTime?
+  @@unique([storyId, number])
+}
+
+model StoryExport {
+  id             String @id @default(cuid())
+  userId         String
+  user           User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  versionId      String
+  status         String @default("QUEUED")
+  assetPublicId  String? @unique
+  notificationStatus String @default("NOT_REQUESTED")
+  recipient      String?
+  errorCode      String?
+  workflowRunId  String?
+  createdAt      DateTime @default(now())
+  @@unique([userId, versionId])
 }

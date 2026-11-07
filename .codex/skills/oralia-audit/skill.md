@@ -1,62 +1,34 @@
 ---
 name: oralia-audit
-description: Audit Oralia frontend interactions, Vellum author bylines and listening/profile modals, server API routes, and populated Prisma/SQLite data. Use for an Oralia verification or readiness report.
+description: Audit Oralia Vellum interactions, production authentication and creation boundaries, API routes, and populated Prisma/Turso or isolated SQLite data; report observed readiness and verification gaps.
 ---
 
 # Oralia Audit
 
-Run a fresh audit from the repository root and report observed results. Read `AGENTS.md`, `package.json`, and the current schema/routes first; do not reuse a previous success report as evidence.
+Read AGENTS.md, package.json, schema.prisma, server/api.ts, and ARCHITECTURE.md for the current contracts. Audit from the repository root; previous success reports are not fresh evidence.
 
-## Checks
+## Frontend
 
-### Frontend and Vellum
+- Trace VellumFeed, StoryCard, CreatorByline, App/public URL helpers, CreatorProfileModal, and ListeningRoomModal. Every card must open its own story and every byline its database creator; check pointer and keyboard activation.
+- Check All Collections, Folk & Fable, Epic & Chronicle, plus region intersections and direct links opened under another collection. The seed baseline is eight stories (6/2), 32 scenes, four editorial profiles; additional legitimate records are allowed.
+- Exercise modal close/back/Escape, focus restoration, audio cleanup, bookmarks, both themes and responsive layouts. Guests can browse and listen. Missing media shows retry/transcript access, never timing tones or replacement content.
+- Check real email-code UI, cookie-restored header identity, avatar failure, logout and Studio gating through isolated tests. Never accept arbitrary PINs or rely on localStorage bearer credentials.
+- Studio must show persisted creation jobs, explicit failures, private previews, immutable revisions, review-gated publication and independent export/email states. A provider failure must not produce fake media or success.
 
-- Trace `src/components/VellumFeed.tsx`, `StoryCard.tsx`, `CreatorByline.tsx`, `CreatorProfileModal.tsx`, and `ListeningRoomModal.tsx` through `src/App.tsx`, `src/hooks/usePublicView.ts`, and `src/lib/catalog.ts`.
-- Verify every Vellum card resolves `Story.creatorId` to the correct database creator. A plain-text fallback author, empty link, missing creator, or byline pointing to another profile fails this check.
-- In a browser, visit All Collections, Folk & Fable, and Epic & Chronicle. Verify the seeded result counts are eight, six and two, including Featured Vellum and Recent Chronicles placements.
-- Activate each author byline and confirm the public creator modal shows the matching username/bio and author-scoped, collection-filtered stories. Activate each card and confirm its Listening Room shows the selected story, scenes, and transcript. Check pointer and keyboard activation.
-- Check modal close buttons, Escape, and Back to Vellum feed. Closing must restore usable focus and stop/unmount the player; public navigation must not mount overlapping dialogs or audio players. Missing or unreviewed stories and unknown public links must show actionable unavailable states.
-- Check mode navigation, collection filters, and the audited cards/modals at mobile and desktop widths in both themes. Capture unexpected console errors, failed API requests, and visible broken controls. Browsing, profiles, and listening must remain available without login.
+## Server and persistence
 
-Reuse a healthy local dev server when available. Otherwise start `npm run dev` in a retained session and use its printed URL. Stop only servers started for this audit. Use available browser tooling; if unavailable, mark interaction checks **NOT CHECKED**, not passed. Existing ignored `.qa` artifacts may help, but inspect scripts before reuse and do not assume they are present or current.
+- Inspect the Nitro routes/api/v1/[...route].ts adapter and Workflow integration. Verify /api/v1 paths, JSON errors, same-origin mutation checks, static narration and internal Workflow routing. Keep Prisma/provider/Node modules out of browser bundles.
+- Call health/catalog, each public story/profile endpoint, missing resources and unauthenticated protected routes. Validate response schemas rather than trusting status 200.
+- Query through server/db.ts only. Confirm author relationships, concrete collection keys, four ordered unique scene numbers per seeded story, positive duration and increasing in-range boundaries. Generated versions must use measured sample boundaries and truthful provenance.
+- Confirm ownership and verified email for uploads, jobs, revisions, publication and downloads. Source/draft/archive bytes belong in private Cloudinary storage, not database blobs. Public Story rows must not expose unfinished drafts.
+- Read counts without printing emails, code/session hashes, tokens or private payloads. Keep the working database unchanged: no seed, migration, db push or reset merely to obtain a passing audit.
 
-### Server and Prisma boundary
+## Verification
 
-- Inspect `server/api.ts`, `server/catalog.ts`, `server/plugin.ts`, `src/lib/api.ts`, and the shared response schemas. Inventory current routes rather than relying on a fixed historical list.
-- Confirm Prisma, database adapters, and server modules remain outside the browser import graph and client bundle. Node-based test files under `src` are not browser entrypoints.
-- Call `GET /api/v1/health` and `GET /api/v1/catalog`. For every returned story and creator, check `/api/v1/stories/:id` and `/api/v1/creators/:username` against the catalog. Validate bodies with the existing Zod schemas; a status 200 alone is insufficient.
-- Verify unknown resources return the intended errors and protected routes reject unauthenticated access. Use existing isolated API tests for OTP, voice preference, bookmark writes, session expiry, and logout; do not modify real accounts or send email during an audit.
+Use an existing healthy dev server or retain an audit-owned server session and stop only that server afterward. Inspect ignored QA scripts before reuse. If browser tooling is unavailable, mark interaction coverage INCOMPLETE.
 
-### Populated configured database
+Run Prisma validation, npm test, then npm run build sequentially. Tests must explicitly select isolated SQLite; hosted credentials in .env never authorize test writes. Use npm run db:verify:turso for read-only cloud verification. Migration status applies to the CLI's local database, not remote Turso.
 
-Run validation and isolated tests; Prisma migration status applies to the local CLI database, not Turso. Use npm run db:verify:turso for read-only configured cloud verification. Record exit codes:
+Cover code expiry/attempts/replay/resend/rates, SMTP rejection without session issuance, cookie restoration/logout, old credential rejection, owner isolation, schema preservation, provider/schema failures, ambiguous paid calls, completed-stage reuse, immutable publication, archive checksums and email-only retries. Provider mocks belong only in tests. Do not send real email, invoke paid generation, publish or modify real accounts as a side effect of a read-only audit.
 
-```bash
-npx prisma validate
-npx prisma migrate status
-npm test
-npm run build
-```
-
-Use the existing server-side Prisma client from `server/db.ts` in a temporary Node/TypeScript check, never a React component. Query model counts and stories with their author and ordered scenes; always disconnect afterward. Verify:
-
-- The database is populated, both canonical collections are represented, and the catalog's stories, authors, and keyframes agree with actual Prisma query results.
-- Seed records expected by `prisma/content/stories.json` exist with four scenes each. Report current counts rather than assuming exactly eight stories or four creators forever; additional legitimate records are allowed.
-- Story authors exist; scene numbers are unique and ordered; timestamps are finite, nonnegative, increasing, and within the positive audio duration. Shared story schemas accept the adapted records.
-- Relevant model reads and relational queries complete without Prisma errors. Read counts for users, stories, scenes, bookmarks, challenges, and sessions without exposing email addresses, tokens, or private record contents.
-
-Keep the real database unchanged. Do not run `db push`, migrations that apply changes, seed, reset, or destructive cleanup merely to obtain a passing report. Existing `npm test` API coverage uses an isolated temporary SQLite database; verify that isolation before running changed test scripts. If setup is missing or a check fails, report the command/error and needed setup instead of silently repairing it.
-
-## Verification report
-
-Return **Oralia audit: PASS** only when all required checks were executed successfully. Otherwise use **FAIL** for observed failures or **INCOMPLETE** for unexecuted checks, preserving any failures in the report.
-
-Include:
-
-- Frontend/card coverage: stories, rendered placements, author links, profile/listening modals, collections, viewports, and themes checked.
-- API coverage: routes exercised, expected error cases, and response validation results.
-- Database verification: actual model counts, collection coverage, relationship/timeline integrity, and executed Prisma query results.
-- Validation commands with pass/fail results, TypeScript/bundle warnings, and unexpected browser errors.
-- Findings with file/route references, skipped checks or limitations, and any audit-owned resources cleaned up.
-
-For a complete pass, finish with: **Verification successful: audited Vellum author bylines and modal triggers work, the configured catalog is populated, and all executed Prisma/API checks passed.** Never print that success statement after a failed or skipped required check. Save a report file only when requested; otherwise report in the conversation.
+Report actual PASS, FAIL or INCOMPLETE with command results, stories/bylines/modals/API queries exercised, viewports/themes, database integrity, warnings/errors and skipped checks. A successful build or mocked test does not verify live model access, inbox receipt, Cloudinary delivery settings or Vercel Workflow operation. Print a verification success statement only for checks actually executed successfully; keep external integration gaps explicit.

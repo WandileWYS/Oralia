@@ -18,13 +18,14 @@ import type { AppMode } from './types/mode';
 import type { CollectionFilter } from './types/story';
 
 export default function App() {
-  const [mode, setMode] = useState<AppMode>('vellum');
+  const [mode, setMode] = useState<AppMode>(() => new URLSearchParams(location.search).has('export') ? 'creator_studio' : 'vellum');
   const [collection, setCollectionFilter] = useState<CollectionFilter>('ALL');
   const { session, save: setSession, signOut, notice: sessionNotice } = usePersistentSession();
   const catalog = useDatabaseCatalog();
   const stories = catalog.data?.stories ?? [];
   const creators = catalog.data?.creators ?? [];
   const [authOpen, setAuthOpen] = useState(false);
+  useEffect(() => { if (session) setAuthOpen(false); }, [session]);
   const publicView = usePublicView();
   const [theme, setTheme] = useState<'dark' | 'light'>(() => {
     try { return localStorage.getItem('oralia-editorial-theme') === 'dark' ? 'dark' : 'light'; } catch { return 'light'; }
@@ -39,7 +40,6 @@ export default function App() {
   const returnFromReader = () => { setAuthOpen(false); if (mode === 'education') publicView.close(); else returnToVellum(); };
   const requestedStory = publicView.view?.kind === 'story' ? stories.find(story => story.id === publicView.view?.key) : undefined;
   const entry = requestedStory ? getPlayableStories([requestedStory])[0] : undefined;
-  const template = getPlayableStories(stories)[0]?.story;
   const profile = publicView.view?.kind === 'creator' ? creators.find(creator => creator.username === publicView.view?.key) : undefined;
   const missingPublicRecord = publicView.view?.kind === 'creator' ? !profile : !requestedStory;
   const publicCatalogPending = !!publicView.view && missingPublicRecord && (catalog.pending || !!catalog.error);
@@ -52,7 +52,7 @@ export default function App() {
       {catalog.data && catalog.error && <div className="catalog-refresh-notice" role="alert"><p>The latest collection could not load. {catalog.error}</p><button type="button" className="secondary-button" onClick={catalog.retry}>Retry collection refresh</button></div>}
       {catalog.isRefreshing && <p className="helper-text catalog-refreshing" role="status">Refreshing the collection…</p>}
       {catalog.data && visibleMode === 'vellum' && <VellumFeed stories={stories} creators={creators} collection={collection} onCollectionChange={setCollectionFilter} onCreate={() => selectMode('creator_studio')} />}
-      {visibleMode === 'creator_studio' && (session ? <><p className="demo-session-banner" role="status">Creator @{session.username} · Local OTP simulation</p>{template ? <CreatorStudio collection={collection === 'ALL' ? 'FOLK_AND_FABLE' : collection} stories={stories} session={session} onSessionChange={setSession} /> : <p className="notice">Load the collection to open the storyboard editor.</p>}</> : <CreatorAccessGate onSignIn={() => setAuthOpen(true)} />)}
+      {visibleMode === 'creator_studio' && (session ? <CreatorStudio collection={collection === 'ALL' ? 'FOLK_AND_FABLE' : collection} session={session} onPublished={catalog.retry} /> : <CreatorAccessGate onSignIn={() => setAuthOpen(true)} />)}
       {catalog.data && visibleMode === 'education' && <EducationFeed creators={creators} collection={collection} onCollectionChange={setCollectionFilter} stories={stories} />}
     </main>
     <footer className="site-footer"><span><AudioLines size={16} />oralia. <span>Every voice carries a world.</span></span><span>Built with care <Heart size={11} /> Andela × OpenAI Codex Accelerator</span></footer>

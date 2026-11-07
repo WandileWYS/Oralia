@@ -1,134 +1,61 @@
-# Oralia — Research & Gap Analysis
+# Oralia Research and Gap Analysis
 
-**Status:** Research baseline with local Phase 4 implementation notes
-**Reviewed:** 5 November 2026
+Maintained production decisions, 8 November 2026. Implementation contracts are in ARCHITECTURE.md; this document records evidence, tradeoffs, and remaining operational verification.
 
-## Local Phase 4 findings
+## Audio and image precision
 
-- **Database boundary:** Prisma/SQLite runs in TypeScript Vite dev/preview middleware under /api/v1. React consumes validated JSON; there is no Prisma import or catalog fixture fallback in the browser. Migration, db push and idempotent seeding are part of local setup. The seed preserves user bookmarks/accounts; migration and API tests use a separate temporary database.
-- **Authenticity and scope:** Eight abridged English adaptations identify their historical collection, region and cultural limitations. The sources include Barker/Sinclair's [West African Folk-Tales](https://www.gutenberg.org/files/66923/66923-h/66923-h.htm), Honey's [South-African Folk-Tales](https://www.gutenberg.org/cache/epub/38339/pg38339-images.html), and [Swahili Tales](https://en.wikisource.org/wiki/Swahili_Tales). Historical translations are not substitutes for contemporary community review. Do not label the southern African tink-tinkje tale as Zulu merely because both appear in a regional collection. Story-specific source notes travel to the Listening Room and export manifest.
-- **Failure behavior:** A local media availability endpoint avoids requesting a missing audio URL. Web Audio can render a quiet timing tone into a WAV blob; the normal HTML audio element then remains the only clock. Explicitly label the tone as non-narration, cancel stale synthesis work after source changes, and release blob URLs. Image errors preserve narration/transcript and the scene title. A missing database produces a visible retry state, never unrelated stories.
-- **Authentication simulation:** The requested email/PIN flow intentionally accepts any six digits and sends no email. Single-use five-minute challenges, hashed seven-day sessions, reserved collection addresses and account-scoped bookmark/voice writes support realistic local behavior; they do not verify email ownership. Persisting this requested simulator session in localStorage is a presentation contract, not a production identity design.
-- **Interaction audit:** Include nested Escape behavior, session/bookmark reload recovery, all 32 scene boundaries, both playback voice choices, missing-media tone playback, empty regional intersections, ZIP payload integrity, mobile header width and reduced motion. Offline PWA downloads, durable drafts, AI generation and real transactional email remain separate production work.
+A single `HTMLAudioElement.currentTime` is the clock. Browser `timeupdate` frequency varies with load, typically around 4–66 Hz; it cannot guarantee a boundary update on every display frame. While playing visibly, one `requestAnimationFrame` loop reads the media clock and updates React only when the active scene changes. Media events handle pause, seeking, duration, buffering, and rate changes; foreground return recomputes immediately. Ready, decoded imagery can swap on the next available paint, without a literal zero-latency guarantee. [MDN timeupdate](https://developer.mozilla.org/en-US/docs/Web/API/HTMLMediaElement/timeupdate_event), [MDN currentTime](https://developer.mozilla.org/en-US/docs/Web/API/HTMLMediaElement/currentTime), [MDN requestAnimationFrame](https://developer.mozilla.org/en-US/docs/Web/API/Window/requestAnimationFrame)
 
-## Executive findings
+Use continuous half-open scene ranges. Exact-boundary seeking selects the scene beginning there. Prefetch/decode the next images, retain the previous image if loading fails, and keep captions/narration available. Disable duration-dependent controls until finite metadata arrives. Stop the paint loop on unmount/pause/hidden tabs and release recording streams and object URLs.
 
-1. Treat the `HTMLAudioElement` timeline as the playback clock. `timeupdate` is adaptive and can arrive only about 4–66 times per second, so it is not precise enough by itself for slide boundaries. Poll `currentTime` with `requestAnimationFrame` while playing, but publish React updates only when the active keyframe changes. With an image already fetched and decoded, the visual can change on the next paint; browser scheduling, timer precision, and image decode mean this is near-frame sync, not a literal zero-latency guarantee. [MDN: `timeupdate`](https://developer.mozilla.org/en-US/docs/Web/API/HTMLMediaElement/timeupdate_event), [MDN: `currentTime`](https://developer.mozilla.org/en-US/docs/Web/API/HTMLMediaElement/currentTime), [MDN: `requestAnimationFrame`](https://developer.mozilla.org/en-US/docs/Web/API/Window/requestAnimationFrame), [React: `useSyncExternalStore`](https://react.dev/reference/react/useSyncExternalStore)
-2. Make Mode 2 a durable asynchronous job. Store generated assets privately, package them into a ZIP, and email a link that can mint a short-lived download URL. Keep the archive out of the normal email path; MIME encoding increases size and each email provider and recipient mailbox has its own limits. [Cloudflare R2: presigned URLs](https://developers.cloudflare.com/r2/api/s3/presigned-urls/), [Resend: sending attachments](https://resend.com/docs/api-reference/emails/send-email)
-4. Offline playback needs an explicit “save story” contract. Cache the app shell and metadata by default, but cache substantial audio only when the user asks for offline access. Bound and expire media caches, check storage estimates, support range requests for cached audio, and show an offline/partial-download state. [Workbox: serving cached audio and video](https://developer.chrome.com/docs/workbox/serving-cached-audio-and-video), [Workbox: storage quota](https://developer.chrome.com/docs/workbox/understanding-storage-quota)
+Gemini's proposed image times are narrative suggestions. Once the polished text replaces the source narration, source timestamps no longer describe the final track. Oralia synthesizes four PCM segments at 24 kHz, mono, 16-bit and measures actual sample counts. Final starts/ends and assembled duration use these samples. Cloudinary may rewrite WAV metadata; sample content and rate must remain intact. Preserve proposed timestamps separately for provenance.
 
-## 1. Audio-image synchronization
+Transcription model capabilities and size/format constraints differ. The application limit is five minutes / 20 MB, below the documented completed-file transcription cap. Transcription is not used to fabricate polished-track timing. [OpenAI speech-to-text](https://developers.openai.com/api/docs/guides/speech-to-text), [OpenAI text-to-speech](https://developers.openai.com/api/docs/guides/text-to-speech)
 
-### Recommended timing model
+## Real authentication
 
-- **One clock:** The audio element's `currentTime` is authoritative for playback, seek, playback-rate changes, and resume. Keep keyframe times in seconds relative to the same audio asset. Avoid a second accumulating JavaScript clock; it diverges during pauses, stalls, seeking, backgrounding, and rate changes.
-- **Half-open intervals:** Store sorted keyframes with `startSeconds` and optional `endSeconds`; a frame is active on `[startSeconds, endSeconds)`. At any time, select the latest keyframe whose start is at or before `currentTime`. Specify a poster/fallback before the first keyframe and a final-frame behavior after the last one.
-- **Two update paths:** While playing in a visible tab, run one `requestAnimationFrame` loop that reads `audio.currentTime` and computes the active keyframe. Publish only when the keyframe index changes. Also recompute on `play`, `pause`, `seeking`, `seeked`, `loadedmetadata`, `durationchange`, `ratechange`, `waiting`, `playing`, and `ended`; recompute on `visibilitychange` when the page becomes visible. Cancel the loop while paused, ended, or unmounted.
-- **Do not render the clock:** Avoid `setState(currentTime)` on every animation frame or `timeupdate`. Keep high-frequency clock reads in a playback controller/ref; expose a stable snapshot such as `activeKeyframeId`, playback state, and duration to React. `useSyncExternalStore` is a suitable bridge when using an external controller; its `getSnapshot` must return a cached/stable value when nothing changed.
-- **Prepare images ahead:** Fetch the first image before allowing playback to start, then prefetch and decode the next one or two keyframes. Retain the previous image until the next image is ready, rather than flashing an empty frame. Use responsive image sizes and a small placeholder/blur state on slow links.
-- **Seek behavior:** A seek immediately reads the destination time and activates the matching frame. Do not wait for a future `timeupdate`. A drag scrubber may update its thumb locally while dragging; on commit, seek the audio element and derive the final slide from the media clock.
+Nodemailer provides the Node equivalent of the requested SMTP transport: Gmail `smtp.gmail.com:587`, required STARTTLS, TLS certificate validation, and Oralia display name. Do not report delivery before SMTP acceptance or issue a session after failure. SMTP acceptance does not prove inbox placement. [Nodemailer SMTP transport](https://nodemailer.com/smtp)
 
-`currentTime` is an approximation and its observed update frequency depends on the browser and media pipeline. `timeupdate` frequency varies with system load; `requestAnimationFrame` is paint-aligned and can be throttled in background tabs. Consequently, target a visually correct next paint after a boundary in an active tab, not a hard real-time deadline. Mobile decoding, memory pressure, and a newly fetched image can add visible delay even if the index calculation is exact.
+Random six-digit codes are keyed-hashed, expire after ten minutes, permit five attempts, and are consumed once. Persist email/IP rate limits and sixty-second resend cooldown in Turso. Database-backed opaque sessions use HttpOnly, SameSite cookies and Secure cookies in production. Legacy simulated credentials are revoked at cutover; browser bearer storage is removed. Stable AUTH_SECRET configuration is necessary across serverless instances/deployments.
 
-### Timestamp quality is upstream of React
+## Structured production generation
 
-AI-generated story beats should not invent precise timestamps. Start with transcription segments or word-level timestamps where the chosen transcription model supports them, ask the storyboard step to select from/anchor to those time ranges, and validate every keyframe against the audio duration and monotonic ordering. Provide an editor to adjust frame boundaries and transcript captions before publication. Transcription support, formats, model names, and file caps change; the current OpenAI speech-to-text guide lists a 25 MB completed-file cap and supported formats, and describes timestamp granularity and model-specific constraints. [OpenAI: File transcription](https://developers.openai.com/api/docs/guides/speech-to-text)
+The exact Gemini `gemini-3.5-flash-lite` model receives culturally conservative instructions and a strict four-scene JSON schema. Reject missing, blocked, empty, inconsistent, or oversized output. Keep original text/transcript, polished text, prompts, language, and provenance. The joined narration must equal the polished story. Structured output still requires runtime semantic validation. [Gemini structured output](https://ai.google.dev/gemini-api/docs/structured-output)
 
-### Timing edge cases to represent
+OpenAI provides real transcription, `tts-1-hd` narration, and scene images (initial configured image model `gpt-image-2.5-sunburst`). Missing keys/model access must produce explicit job failures. No sample narration, fabricated success, pre-curated replacement photos, or placeholder illustrations may complete a failed generated story. Provider mocks are restricted to isolated tests. [OpenAI image generation](https://developers.openai.com/api/docs/guides/image-generation)
 
-| Case | Required behavior |
-|---|---|
-| `duration` is `NaN` or `Infinity` before metadata | Disable duration-dependent controls; initialize only after `loadedmetadata` and handle `durationchange`. |
-| Keyframe time is negative, beyond duration, unsorted, or duplicated | Reject/repair during server validation; never let malformed model output reach the player. |
-| Gap at the beginning or between frames | Define a poster/hold-last-frame rule. Never render an accidental blank. |
-| Seek lands exactly on a boundary | Use `[start,end)` consistently and select the frame beginning at that time. |
-| Buffering / `waiting` | Freeze the image; keep it tied to current media time. Resume timing from `playing`. |
-| Playback rate changes | Read `currentTime`; do not scale a separate timer. |
-| Audio ends or loops | Resolve the final frame, and on loop reset to the frame at time zero. |
-| Tab background/foreground or mobile app switch | Stop expensive frame polling when hidden; recompute from `currentTime` on return. |
-| Browser pauses audio due to gesture/power policy | Keep a clear user-initiated play affordance and report actual media state. |
-| Image request/decode fails | Retain prior frame or show a designed fallback; retry without stopping audio. |
-| Audio seek on CDN/storage | Verify byte-range requests (`206 Partial Content`, `Content-Range`) and CORS where cross-origin; otherwise seeking may be slow or unavailable. |
+A confirmed transient failure can retry within a bounded budget. A dropped connection after a potentially accepted paid request is indeterminate: reserve asset identities, recover completed stored results where possible, and require explicit creator review if completion is unknown. Repeating a paid request blindly may duplicate charges. Completed stages remain persisted across workflow restarts.
 
-## 2. Creator export and email pipeline
+## Literary collections and visual continuity
 
-### Proposed job flow
-
-1. The creator submits a pitch and requested deliverables. The API creates a `creatorJob` and an idempotent processing record, then returns `202 Accepted` with the job ID and status URL.
-2. Upload the recording to private object storage through a server-minted, short-lived upload URL. Persist the storage key, checksum, content type, consent/rights metadata, and retention deadline; keep provider secrets on the server.
-3. A worker transcribes the pitch, extracts a storyboard, creates image prompts and prototype images, and validates the outputs. Store each step's state and retryable error separately so a failed image does not require retranscribing the pitch.
-4. A packaging worker creates a versioned ZIP containing the storyboard JSON, transcript/captions (when selected), prompt manifest, generated images, and a short README with asset filenames and usage notes. Include a manifest with content types, sizes, and checksums. Store the ZIP privately.
-5. Write an email notification to a transactional outbox in the same database transaction as the job's `ready` transition. A sender worker sends a short message with the project name, expiry, and a link to an authenticated download page. The page checks the creator's authorization and requests a fresh, short-lived signed URL.
-6. Record delivery-provider message ID and status. Retry transient rate-limit/server/network failures with bounded exponential backoff and jitter; use a stable idempotency key. Keep a dead-letter/manual-retry state for exhausted failures. Email failure must not erase a ready export.
-
-### Why the link should be the default
-
-Large image bundles can exceed the sender's limit after Base64/MIME overhead, then be rejected by the recipient's mail service. Even when an attachment fits, email is a poor asset store. A signed URL grants time-limited access to one object without exposing storage credentials; protect the ZIP with private-by-default storage, a short expiry, authorization before URL minting, and an explicit deletion/retention policy. Avoid placing a long-lived public URL in email or logs. [Cloudflare R2: presigned URLs](https://developers.cloudflare.com/r2/api/s3/presigned-urls/)
-
-If a provider such as Resend is selected, keep it behind an `EmailProvider` adapter and re-check its live message-size, attachment, idempotency, and rate-limit rules before launch. Its send API supports attachments and idempotency keys, but that does not remove recipient-side attachment limits. [Resend: send email](https://resend.com/docs/api-reference/emails/send-email), [Resend: API feature overview](https://resend.com/features/email-api)
-
-### Export states and operations
-
-`queued → transcribing → planning → generating → packaging → ready → expired`; any active state may enter `retrying` or `failed`. Keep email status separate: `pending → sent → delivered | bounced | complained | failed`. Store provider event IDs, but do not log signed URLs or raw audio/transcripts by default. Users should be able to retry a notification without rerunning generation, request a fresh download link, and delete a project and its retained source assets.
-
-## 3. Thematic prompt engineering
-
-Use one visual bible per story: stable characters, setting, period, composition and palette. Folk & Fable modifiers emphasize warm illustrated storytelling, expressive characters and readable compositions. Epic & Chronicle modifiers emphasize cinematic framing, environmental detail, historical texture and narrative consequence. Do not invent cultural details or claim style changes create a reviewed translation or suitable school resource.
-
-Preserve the original spoken narration and measured cues. Collection names are literary descriptors; moderation and editorial review remain independent publication requirements.
-
-## 4. Resilience and offline behavior
-
-### Cache layers and policies
-
-| Data | Suggested storage/policy | Reason |
+| Collection | Prompt direction | Editorial responsibility |
 |---|---|---|
-| Hashed JS/CSS/app shell | Service-worker precache; deploy content-hashed assets and prune old cache versions | Allows app launch offline without serving stale unversioned code. |
-| Feed/story metadata | IndexedDB or Cache Storage; network-first for discovery, cached snapshot as offline fallback | Fresh feeds when available, readable saved metadata without a connection. |
-| Story images | Cache Storage runtime cache with max-entry/age limits; fetch the current and next frame early | Images are reusable but can consume quota quickly. Do not cache unbounded public feed browsing. |
-| Audio | Explicit “save for offline” action; store complete media response/blob and metadata in bounded storage; show progress and size | Long audio is large. Cache only assets a user requested or a deliberate small preview. |
-| Unsent recording/job draft | IndexedDB outbox with retry state and upload resumption where supported; user can retry when online | `navigator.onLine` is only a hint; the actual request outcome is authoritative. Never silently discard a recording. |
-| Auth tokens / secrets | No secrets in Cache Storage, URLs, or persisted client logs | Prevent credential exposure and accidental sharing. |
+| Folk & Fable | Warm illustrated folklore; expressive characters, clear silhouettes, coherent natural light, gentle palette; preserve cultural/source specificity | Review moral claims and historical context; no automatic classroom suitability claim |
+| Epic & Chronicle | Cinematic editorial composition, layered environments, considered contrast, historical depth and visual restraint | Review chronology, ancestry, cultural representation, conflict and invented detail |
 
-Use Workbox or equivalent to manage service-worker precaching, runtime cache versions, expiry, and quota cleanup. Storage limits vary by browser and device; inspect `navigator.storage.estimate()` and treat persistence requests as requests, not guarantees. For cached audio/video, configure and verify range handling rather than assuming every cached full response will satisfy a seek request correctly. Cross-origin opaque responses can use unexpectedly large quota accounting. [Workbox: service-worker deployment](https://developer.chrome.com/docs/workbox/service-worker-deployment), [Workbox: audio/video range requests](https://developer.chrome.com/docs/workbox/modules/workbox-range-requests), [Workbox: storage quota](https://developer.chrome.com/docs/workbox/understanding-storage-quota)
+Apply a common visual bible across four prompts: named character descriptions, consistent clothing/environment, palette, medium, perspective and recurring objects. Keep literary collection separate from region, tradition, language, consent, and content review. Do not invent translations or imply endorsement by a community. Existing historical adaptations preserve their sources and the distinction between editorial photographs and newly generated illustrations.
 
-### Low-connectivity product behavior
+## Durable storage, publication, and export
 
-- Offer a lightweight image rendition first; only request higher resolution when appropriate. Compress story art and expose file sizes before offline downloads.
-- Prefetch one or two upcoming images, not an entire unbounded feed. Prioritize the audio and current frame.
-- Show separate states for offline, queued upload, partial download, unavailable asset, and expired export. Keep player controls usable when art fails.
-- For background upload, use a durable local outbox and resume on app focus/network recovery. Browser Background Sync support is uneven, so it must not be the only retry mechanism.
-- Preserve an export request if email delivery is unavailable. Let the creator return to a job-status page and retrieve a fresh link.
-- Keep object storage and CDN headers correct: media MIME type, byte ranges, cache-control, CORS, and signed-link expiration. Test with a real seek and a cold cache, not just a full download.
+Vercel Workflow sequences short durable steps; store job IDs and references rather than large binary payloads. Nitro's Vite integration supplies API and internal Workflow routes while producing Vercel Build Output. Do not overlay a SPA rewrite on API or Workflow paths. [Vercel Workflow Vite setup](https://useworkflow.dev/docs/getting-started/vite)
 
-## 5. Additional gaps and decisions to close
+Cloudinary is the selected media provider. Signed direct source uploads use authenticated delivery and reserved owner-scoped IDs. Completion must be verified server-side against actual resource/type/format/size/duration. Draft previews and exports require owner authorization and expiring private delivery; publish complete reviewed media to versioned public playback paths. Test real account ZIP settings, audio byte-range delivery, and source privacy separately. [Cloudinary authenticated delivery](https://cloudinary.com/documentation/control_access_to_media)
 
-| Gap | Failure mode | Product/architecture decision |
-|---|---|---|
-| Recording format differs by browser | Safari/iOS, Chromium, or Firefox may produce different containers/codecs; upload can fail at transcription or replay. | Probe `MediaRecorder.isTypeSupported()` at runtime, record the actual MIME type and extension, retain the original, normalize server-side when needed, and provide a tested fallback. MDN cautions that a supported type does not guarantee recording succeeds under resource pressure. [MDN: `MediaRecorder.isTypeSupported`](https://developer.mozilla.org/en-US/docs/Web/API/MediaRecorder/isTypeSupported_static) |
-| Codec/container assumptions | Opus-in-WebM/Ogg support differs across older Safari versions; MP3 playback is broad but WebCodecs encoding support is a different question from HTML audio playback. | Use `canPlayType()`/capability checks for uploaded assets, serve a broadly compatible playback rendition (MP3 or AAC/MP4 as selected after device testing), and retain an original archival object. Offer more than one source when needed. [MDN: audio codecs](https://developer.mozilla.org/en-US/docs/Web/Media/Guides/Formats/Audio_codecs), [MDN: media containers](https://developer.mozilla.org/en-US/docs/Web/Media/Guides/Formats/Containers) |
-| Transcription size, dialect, and names | A large recording exceeds an API cap; transcription may flatten code-switching, names, or dialects; keyframes then drift from the spoken story. | Upload/compress or split safely at silence/sentence boundaries, preserve chunk offsets, provide language/context hints only where supported, and require correction for publishable captions and timestamps. Current transcription APIs have model-specific formats and limits. [OpenAI: File transcription](https://developers.openai.com/api/docs/guides/speech-to-text) |
-| Repeated character drift | Main character clothing, age, body shape, or skin tone changes between images. | Maintain a reusable character bible/reference image, generate/select a key character reference first, keep prompt version and reference IDs in metadata, and allow per-frame human replacement. |
-| Unsafe or unsuitable generated image | Tier label is mistaken for content review; model output differs from the prompt. | Moderate text and images, apply an explicit per-tier editorial policy, route uncertain outputs to human review, and hide unreviewed school-feed content. OpenAI states its moderation endpoint does not classify audio and is not a CSAM detection or response system. [OpenAI: Moderation](https://developers.openai.com/api/docs/guides/moderation) |
-| Child accounts and school privacy | Audio may identify a child, school, location, or family; recordings and transcripts may be retained longer than intended. | Prefer educator-managed/guardian-approved accounts for school use, collect the minimum identifiers, document consent and deletion/retention controls, and complete jurisdiction-specific child-privacy review before launch. This document does not determine legal compliance. |
-| Cultural rights and attribution | Oral stories may be restricted, sacred, community-owned, or shared without permission; AI may invent “authentic” details. | Capture storyteller consent, attribution preference, source community/region when supplied, rights/license, reuse scope, takedown contact, and whether AI adaptation is allowed. Add a curator correction and dispute path. |
-| Offline quota, stale data, or token leakage | User storage fills; old tier variant remains cached; a signed URL appears in logs/history. | Bound cache sizes, use content/version keys, expire entries, do not cache signed export URLs, and keep audio and export retention separate. |
-| Duplicate/retried jobs | Mobile reconnects resend a pitch; worker/email retry creates duplicate assets or notifications. | Require client idempotency keys, idempotent worker steps, transactional outbox, and deduplication keys for provider calls. |
-| Cost and latency runaway | Unbounded keyframe count or repeated image retries multiplies generation cost and delays delivery. | Cap audio length, frame count, output resolution, retry count, and concurrent jobs; expose status and expected next step; allow cancel/delete. |
-| Accessibility and presentation | A visual-only carousel excludes users; motion or autoplay is unpleasant or inaccessible. | Provide captions/transcript, narration controls, descriptive alt text, keyboard-accessible previous/next, reduced-motion support, visible focus, and no forced autoplay with sound. |
-| API secrets and upload abuse | A browser bundle exposes the model API key or permits oversized uploads. | Keep AI/email/storage credentials server-side; mint scoped uploads; enforce MIME, byte, duration, ownership, rate, and quota checks; scan and validate server-side. |
+Exports come from immutable database versions, with prompts, measured boundaries, media, transcripts and checksums. Package once, store the archive, then send a stable owner-authenticated app link that mints an expiring download. Notification failure never changes a ready archive into a failed generation job. SMTP has no provider idempotency contract: concurrent claims reduce duplicates, but an interrupted accepted send needs reconciliation. The earlier R2/Resend research remains a useful comparison, not the selected runtime. [R2 presigned URLs](https://developers.cloudflare.com/r2/api/s3/presigned-urls/), [Resend email API](https://resend.com/docs/api-reference/emails/send-email)
 
-## References
+Prisma retains its SQLite provider with the libSQL adapter. Cloud schema changes use explicit authenticated SQL and checksums; do not expect local Prisma CLI db-push to target remote Turso. Preserve lazy client construction and fail clearly when hosted variables are missing. [Prisma SQLite/Turso](https://docs.prisma.io/docs/orm/v7/core-concepts/supported-databases/sqlite)
 
-- [MDN: `HTMLMediaElement.currentTime`](https://developer.mozilla.org/en-US/docs/Web/API/HTMLMediaElement/currentTime)
-- [MDN: `timeupdate`](https://developer.mozilla.org/en-US/docs/Web/API/HTMLMediaElement/timeupdate_event)
-- [MDN: `requestAnimationFrame`](https://developer.mozilla.org/en-US/docs/Web/API/Window/requestAnimationFrame)
-- [React: `useSyncExternalStore`](https://react.dev/reference/react/useSyncExternalStore)
-- [MDN: `MediaRecorder.isTypeSupported`](https://developer.mozilla.org/en-US/docs/Web/API/MediaRecorder/isTypeSupported_static)
-- [MDN: audio codecs](https://developer.mozilla.org/en-US/docs/Web/Media/Guides/Formats/Audio_codecs)
-- [OpenAI: speech-to-text](https://developers.openai.com/api/docs/guides/speech-to-text)
-- [OpenAI: image generation](https://developers.openai.com/api/docs/guides/image-generation)
-- [OpenAI: moderation](https://developers.openai.com/api/docs/guides/moderation)
-- [Workbox: serving cached audio and video](https://developer.chrome.com/docs/workbox/serving-cached-audio-and-video)
-- [Cloudflare R2: presigned URLs](https://developers.cloudflare.com/r2/api/s3/presigned-urls/)
-- [Resend: send email API](https://resend.com/docs/api-reference/emails/send-email)
+## Connectivity and offline scope
+
+Current bookmarks save references, not audio. Offline media downloads and service-worker caching remain deferred. A future explicit save-for-offline flow must bound bytes/entries/age, report partial downloads, handle storage quota/eviction, version caches, and support audio range responses. Never share authenticated responses or signed URLs across accounts. `navigator.onLine` alone is not evidence a request will work. [Workbox cached audio/video](https://developer.chrome.com/docs/workbox/serving-cached-audio-and-video), [Workbox storage quota](https://developer.chrome.com/docs/workbox/understanding-storage-quota)
+
+Network or codec failure displays retry and transcript access, not substitute content. Runtime checks recorder MIME support; original uploads vary across Safari, Chromium and Firefox. Test mobile seeking, background/foreground, output route changes, and constrained memory, particularly for uncompressed narration.
+
+## Operational gaps and verification gates
+
+- A passing isolated suite verifies contracts with mocked providers, not paid account/model access or inbox receipt. A real integration run must cover SMTP verification, STT, structured polishing, four images, measured narration, persistence, playback, publication and authorized ZIP download.
+- Real OpenAI calls may be deliberately skipped while the user configures credentials; report that gap and fail affected runtime operations clearly. Never mark generation verified based on fixture output.
+- Vercel environment secrets, Workflow availability, function limits, and live routing require hosted verification after deployment. Builds and Prisma generation must not contact a database.
+- Preserve accounts/bookmarks/catalog during migration, but revoke simulated sessions/challenges. Back up before cloud schema writes and refuse unexpected schemas.
+- Retention/cleanup of abandoned private drafts, operator reconciliation of indeterminate provider/dispatch/send outcomes, school editorial processes, and offline PWA delivery need explicit operational ownership.
+- Public media promotion can complete before its catalog transaction; failed publication can leave unlisted versioned assets. Retry should recover these copies. Long-term cleanup must avoid removing assets referenced by published versions or completed exports.

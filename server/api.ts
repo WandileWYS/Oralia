@@ -1,135 +1,121 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { randomBytes, createHash } from 'node:crypto';
 import { z } from 'zod';
 import { db } from './db.ts';
 import { readCatalog } from './catalog.ts';
+import { bundledMedia } from './mediaManifest.ts';
 import { storyCollectionSchema } from '../src/types/story.ts';
 import { creatorEmailSchema } from '../src/types/creator.ts';
-import { bundledMedia } from './mediaManifest.ts';
-import { presentationMode } from './environment.ts';
-import { keyframeImageRequestSchema, keyframeImageResponseSchema } from '../src/types/images.ts';
-import { fallbackImage } from './images.ts';
+import { polishedPlanSchema } from '../src/types/creation.ts';
 import { reportDatabaseFailure } from './databaseDiagnostics.ts';
+import { auth, sessionData, setSessionCookie } from './auth.ts';
+import { appOrigin } from './config.ts';
+import { ServiceError } from './errors.ts';
+import { completeUpload, createJob, jobData, ownedJob, reserveUpload, retryJob, reviseJob } from './creation.ts';
+import { createExport, exportData } from './exports.ts';
+import { ownedVersion } from './publication.ts';
+import { workflowRuntime } from './workflowRuntime.ts';
 
-class HttpError extends Error { status: number; constructor(status: number, message: string) { super(message); this.status = status; } }
-function send(response: ServerResponse, status: number, value: unknown) {
-  response.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
+function send(response:ServerResponse,status:number,value:unknown) {
+  response.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});
   response.end(JSON.stringify(value));
 }
-async function body(request: IncomingMessage): Promise<unknown> {
-  // Vercel's Node helpers may have consumed the stream and parsed JSON already.
-  const parsed: unknown = (request as IncomingMessage & { body?: unknown }).body;
-  if (parsed !== undefined) {
-    const text = typeof parsed === 'string' ? parsed : Buffer.isBuffer(parsed) ? parsed.toString('utf8') : JSON.stringify(parsed);
-    if (Buffer.byteLength(text) > 24576) throw new HttpError(413, 'Request is too large.');
-    try { return JSON.parse(text); } catch { throw new HttpError(400, 'Send valid JSON.'); }
+async function body(request:IncomingMessage):Promise<unknown> {
+  const parsed:unknown=(request as IncomingMessage&{body?:unknown}).body;
+  let text='';const maxBytes=128*1024;
+  if(parsed!==undefined)text=typeof parsed==='string'?parsed:Buffer.isBuffer(parsed)?parsed.toString():JSON.stringify(parsed);
+  else {
+    const chunks:Buffer[]=[];let length=0;
+    for await(const chunk of request){const bytes=Buffer.isBuffer(chunk)?chunk:Buffer.from(chunk as Uint8Array);length+=bytes.length;if(length>maxBytes)throw new ServiceError('REQUEST_TOO_LARGE',413,'Request is too large.');chunks.push(bytes);}
+    // Decode once: a transport chunk can end in the middle of a UTF-8 character.
+    text=Buffer.concat(chunks).toString('utf8');
   }
-  let text = '';
-  for await (const chunk of request) {
-    text += String(chunk);
-    if (Buffer.byteLength(text) > 24576) throw new HttpError(413, 'Request is too large.');
-  }
-  try { return JSON.parse(text); } catch { throw new HttpError(400, 'Send valid JSON.'); }
+  if(Buffer.byteLength(text)>maxBytes)throw new ServiceError('REQUEST_TOO_LARGE',413,'Request is too large.');
+  try{return JSON.parse(text);}catch{throw new ServiceError('INVALID_JSON',400,'Send valid JSON.');}
 }
-const hash = (token: string) => createHash('sha256').update(token).digest('hex');
-async function authorized(request: IncomingMessage) {
-  const token = request.headers.authorization?.replace(/^Bearer /, '');
-  const session = token ? await db.session.findUnique({ where: { id: hash(token) }, include: { user: true } }) : null;
-  if (!session || session.expiresAt.getTime() <= Date.now()) throw new HttpError(401, 'Your session has ended. Sign in again.');
-  return { session, token: token! };
+function ipAddress(request:IncomingMessage) {
+  const forwarded=process.env.VERCEL==='1'?request.headers['x-vercel-forwarded-for']:undefined;
+  return typeof forwarded==='string'?forwarded.split(',')[0].trim():request.socket.remoteAddress||'unknown';
 }
-function sessionData(user: { id: string; name: string; username: string; email: string; avatarUrl: string; preferredVoiceType: string }, token: string, expiresAt: Date) {
-  return { kind: 'simulated-otp', id: user.id, displayName: user.name, username: user.username, email: user.email, avatarUrl: user.avatarUrl, token, expiresAt: expiresAt.toISOString(), preferredVoiceType: user.preferredVoiceType };
+async function launchCreation(id:string) {
+  const claimed=await db.creationJob.updateMany({where:{id,status:'QUEUED',stage:'queued'},data:{stage:'dispatching'}});
+  if(!claimed.count)return;
+  try {const run=await workflowRuntime.create(id);await db.creationJob.update({where:{id},data:{workflowRunId:run.runId}});}
+  catch {await db.creationJob.updateMany({where:{id,status:'QUEUED'},data:{status:'INDETERMINATE',errorCode:'WORKFLOW_START_UNKNOWN',retryable:false}});throw new ServiceError('WORKFLOW_START_UNKNOWN',503,'Creation is saved, but dispatch was not confirmed. Review its status before starting another version.');}
 }
-
-export async function handleApi(request: IncomingMessage, response: ServerResponse) {
+export async function handleApi(request:IncomingMessage,response:ServerResponse) {
   try {
-    const url = new URL(request.url || '/', 'http://localhost');
-    const route = url.pathname.replace(/^\/api\/v1/, '');
-    const method = request.method;
-    if (!url.pathname.startsWith('/api/v1/')) throw new HttpError(404, 'API route not found.');
-    if (method !== 'GET' && request.headers.origin && new URL(request.headers.origin).host !== request.headers.host) throw new HttpError(403, 'Use this application’s origin.');
-    if (method === 'GET' && route === '/health') { await db.story.count(); return send(response, 200, { ok: true }); }
-    if (method === 'GET' && route === '/catalog') { const value = url.searchParams.get('collection'); return send(response, 200, await readCatalog(value === null ? undefined : storyCollectionSchema.parse(value))); }
-    if (method === 'GET' && (route.startsWith('/stories/') || route.startsWith('/creators/'))) {
-      const data = await readCatalog();
-      const key = decodeURIComponent(route.split('/')[2]);
-      const value = route.startsWith('/stories/') ? data.stories.find(story => story.id === key) : data.creators.find(creator => creator.username === key);
-      if (!value) throw new HttpError(404, 'This story or creator was not found.');
-      return send(response, 200, value);
+    const url=new URL(request.url||'/','http://localhost');const method=request.method;
+    if(!url.pathname.startsWith('/api/v1/'))throw new ServiceError('NOT_FOUND',404,'API route not found.');
+    const route=url.pathname.slice('/api/v1'.length);
+    if(method!=='GET'&&request.headers.origin&&request.headers.origin!==appOrigin())throw new ServiceError('ORIGIN_REJECTED',403,'Use this application’s origin.');
+    if(method==='GET'&&route==='/health'){await db.story.count();return send(response,200,{ok:true});}
+    if(method==='GET'&&route==='/catalog'){const value=url.searchParams.get('collection');return send(response,200,await readCatalog(value===null?undefined:storyCollectionSchema.parse(value)));}
+    if(method==='GET'&&(/^\/stories\/[^/]+$/.test(route)||/^\/creators\/[^/]+$/.test(route))){
+      const catalog=await readCatalog();const key=decodeURIComponent(route.split('/')[2]);const value=route.startsWith('/stories/')?catalog.stories.find(story=>story.id===key):catalog.creators.find(creator=>creator.username===key);
+      if(!value)throw new ServiceError('NOT_FOUND',404,'This story or creator was not found.');return send(response,200,value);
     }
-    if (method === 'GET' && route === '/media-status') {
-      const input = url.searchParams.get('url') || '';
-      return send(response, 200, { available: bundledMedia.has(input) });
+    if(method==='GET'&&route==='/media-status')return send(response,200,{available:bundledMedia.has(url.searchParams.get('url')||'')});
+    if(method==='POST'&&route==='/auth/otp/request'){
+      const {email}=z.object({email:creatorEmailSchema}).strict().parse(await body(request));return send(response,200,await auth.requestCode(email,ipAddress(request)));
     }
-    if (method === 'POST' && route === '/images/keyframe') {
-      await authorized(request);
-      const input = keyframeImageRequestSchema.parse(await body(request));
-      // Every existing session is simulated. It can never authorize paid generation.
-      return send(response, 200, keyframeImageResponseSchema.parse(fallbackImage(input)));
+    if(method==='POST'&&route==='/auth/otp/verify'){
+      const input=z.object({challengeId:z.string().min(1),pin:z.string().regex(/^\d{6}$/)}).strict().parse(await body(request));
+      const result=await auth.verify(input.challengeId,input.pin,ipAddress(request));setSessionCookie(response,result.token,result.expiresAt);return send(response,200,sessionData(result.user,result.expiresAt));
     }
-    if (method === 'POST' && route === '/auth/otp/request') {
-      if (!presentationMode()) throw new HttpError(403, 'Presentation sign-in is disabled.');
-      const { email } = z.object({ email: creatorEmailSchema }).parse(await body(request));
-      if (email.endsWith('@collections.oralia.invalid')) throw new HttpError(409, 'Collection addresses are reserved. Use your own creator email.');
-      const record = await db.otpChallenge.create({ data: { email, expiresAt: new Date(Date.now() + 5 * 60000) } });
-      return send(response, 200, { challengeId: record.id, expiresAt: record.expiresAt.toISOString(), simulated: true });
+    if(route==='/auth/session'&&method==='GET'){const session=await auth.authorize(request);return send(response,200,sessionData(session.user,session.expiresAt));}
+    if(route==='/auth/logout'&&method==='POST'){const session=await auth.authorize(request);await db.session.delete({where:{id:session.id}});setSessionCookie(response,'',new Date(0));return send(response,200,{ok:true});}
+    if(route==='/me/voice'&&method==='PATCH'){
+      const session=await auth.authorize(request);const {voiceType}=z.object({voiceType:z.enum(['ORIGINAL','STUDIO_AI'])}).parse(await body(request));const user=await db.user.update({where:{id:session.userId},data:{preferredVoiceType:voiceType}});return send(response,200,sessionData(user,session.expiresAt));
     }
-    if (method === 'POST' && route === '/auth/otp/verify') {
-      if (!presentationMode()) throw new HttpError(403, 'Presentation sign-in is disabled.');
-      const { challengeId, pin } = z.object({ challengeId: z.string(), pin: z.string().regex(/^\d{6}$/) }).parse(await body(request));
-      void pin; // The requested local simulator accepts every six-digit PIN.
-      const token = randomBytes(32).toString('hex');
-      const result = await db.$transaction(async tx => {
-        const challenge = await tx.otpChallenge.findUnique({ where: { id: challengeId } });
-        if (!challenge || challenge.used || challenge.expiresAt.getTime() <= Date.now()) throw new HttpError(400, 'This PIN session expired. Request a new PIN.');
-        const consumed = await tx.otpChallenge.updateMany({ where: { id: challengeId, used: false }, data: { used: true } });
-        if (consumed.count !== 1) throw new HttpError(400, 'This PIN session has already been used.');
-        let user = await tx.user.findUnique({ where: { email: challenge.email } });
-        if (!user) {
-          const prefix = challenge.email.split('@')[0].toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 18) || 'creator';
-          const username = `${prefix}_${randomBytes(3).toString('hex')}`;
-          user = await tx.user.create({ data: { email: challenge.email, username, name: prefix, bio: 'Creator on Oralia. This profile is ready for its first published story.', avatarUrl: '/favicon.svg', role: 'CREATOR' } });
-        } else if (user.role !== 'CREATOR') user = await tx.user.update({ where: { id: user.id }, data: { role: 'CREATOR' } });
-        const session = await tx.session.create({ data: { id: hash(token), userId: user.id, expiresAt: new Date(Date.now() + 7 * 86400000) } });
-        return sessionData(user, token, session.expiresAt);
-      });
-      return send(response, 200, result);
+    if(route==='/bookmarks'&&method==='GET'){const session=await auth.authorize(request);const records=await db.bookmark.findMany({where:{userId:session.userId}});return send(response,200,{storyIds:records.map(record=>record.storyId)});}
+    if(/^\/bookmarks\/[^/]+$/.test(route)&&(method==='PUT'||method==='DELETE')){
+      const session=await auth.authorize(request);const storyId=decodeURIComponent(route.split('/')[2]);if(!await db.story.findUnique({where:{id:storyId}}))throw new ServiceError('NOT_FOUND',404,'Story not found.');
+      const pair={userId:session.userId,storyId};if(method==='PUT')await db.bookmark.upsert({where:{userId_storyId:pair},create:pair,update:{}});else await db.bookmark.deleteMany({where:pair});return send(response,200,{ok:true});
     }
-    if (method === 'GET' && route === '/auth/session') {
-      const { session, token } = await authorized(request);
-      return send(response, 200, sessionData(session.user, token, session.expiresAt));
+    if(method==='POST'&&route==='/uploads'){const session=await auth.authorize(request);return send(response,201,await reserveUpload(session.userId));}
+    const uploadMatch=route.match(/^\/uploads\/([^/]+)\/complete$/);
+    if(method==='POST'&&uploadMatch){const session=await auth.authorize(request);const asset=await completeUpload(session.userId,uploadMatch[1]);return send(response,200,{assetId:asset.id});}
+    if(method==='GET'&&route==='/creations'){
+      const session=await auth.authorize(request);const jobs=await db.creationJob.findMany({where:{userId:session.userId},orderBy:{createdAt:'desc'},take:20});return send(response,200,{jobs:await Promise.all(jobs.map(job=>jobData(session.userId,job.id)))});
     }
-    if (method === 'POST' && route === '/auth/logout') {
-      const { session } = await authorized(request);
-      await db.session.delete({ where: { id: session.id } });
-      return send(response, 200, { ok: true });
+    if(method==='POST'&&route==='/creations'){
+      const session=await auth.authorize(request);const {input,requestKey}=z.object({input:z.unknown(),requestKey:z.string().uuid()}).strict().parse(await body(request));const job=await createJob(session.userId,input,requestKey);
+      if(job.status==='QUEUED'&&!job.workflowRunId)await launchCreation(job.id);return send(response,202,await jobData(session.userId,job.id));
     }
-    if (method === 'PATCH' && route === '/me/voice') {
-      const { session, token } = await authorized(request);
-      const { voiceType } = z.object({ voiceType: z.enum(['ORIGINAL', 'STUDIO_AI']) }).parse(await body(request));
-      const user = await db.user.update({ where: { id: session.userId }, data: { preferredVoiceType: voiceType } });
-      return send(response, 200, sessionData(user, token, session.expiresAt));
+    const creationMatch=route.match(/^\/creations\/([^/]+)(?:\/(retry))?$/);
+    if(creationMatch){
+      const session=await auth.authorize(request);const id=creationMatch[1];
+      if(method==='GET'&&!creationMatch[2])return send(response,200,await jobData(session.userId,id));
+      if(method==='POST'&&creationMatch[2]){await retryJob(session.userId,id);await launchCreation(id);return send(response,202,await jobData(session.userId,id));}
+      if(method==='PATCH'&&!creationMatch[2]){const {plan,requestKey}=z.object({plan:polishedPlanSchema,requestKey:z.string().uuid()}).strict().parse(await body(request));const next=await reviseJob(session.userId,id,plan,requestKey);if(!next.workflowRunId)await launchCreation(next.id);return send(response,202,await jobData(session.userId,next.id));}
     }
-    if (route === '/bookmarks' && method === 'GET') {
-      const { session } = await authorized(request);
-      const bookmarks = await db.bookmark.findMany({ where: { userId: session.userId } });
-      return send(response, 200, { storyIds: bookmarks.map(bookmark => bookmark.storyId) });
+    const publishMatch=route.match(/^\/versions\/([^/]+)\/publish$/);
+    if(method==='POST'&&publishMatch){
+      const session=await auth.authorize(request);const version=await ownedVersion(publishMatch[1],session.userId);const job=await ownedJob(session.userId,version.jobId);
+      if(job.status!=='REVIEW_READY')throw new ServiceError('NOT_READY',409,'Complete generation before publishing.');z.object({reviewed:z.literal(true)}).strict().parse(await body(request));await db.creationJob.update({where:{id:job.id},data:{stage:'publishing'}});
+      try{await workflowRuntime.publish(version.id,session.userId);}catch{await db.creationJob.update({where:{id:job.id},data:{stage:'publish failed',errorCode:'PUBLISH_START_FAILED'}});throw new ServiceError('WORKFLOW_START_FAILED',503,'Publication could not start.');}return send(response,202,{ok:true});
     }
-    if (route.startsWith('/bookmarks/') && (method === 'PUT' || method === 'DELETE')) {
-      const { session } = await authorized(request);
-      const storyId = decodeURIComponent(route.split('/')[2]);
-      if (!await db.story.findUnique({ where: { id: storyId } })) throw new HttpError(404, 'Story not found.');
-      const pair = { userId: session.userId, storyId };
-      if (method === 'PUT') await db.bookmark.upsert({ where: { userId_storyId: pair }, create: pair, update: {} });
-      else await db.bookmark.deleteMany({ where: pair });
-      return send(response, 200, { ok: true });
+    if(method==='POST'&&route==='/exports'){
+      const session=await auth.authorize(request);const {versionId}=z.object({versionId:z.string()}).strict().parse(await body(request));const record=await createExport(session.userId,versionId);
+      const claim=await db.storyExport.updateMany({where:{id:record.id,status:{in:['QUEUED','FAILED']}},data:{status:'DISPATCHING',errorCode:null}});
+      if(claim.count)try{const run=await workflowRuntime.export(record.id);await db.storyExport.update({where:{id:record.id},data:{workflowRunId:run.runId}});}catch{await db.storyExport.update({where:{id:record.id},data:{status:'FAILED',errorCode:'WORKFLOW_START_FAILED'}});throw new ServiceError('WORKFLOW_START_FAILED',503,'Export processing could not start.');}return send(response,202,await exportData(session.userId,record.id));
     }
-    throw new HttpError(404, 'API route not found.');
-  } catch (error) {
-    const status = error instanceof HttpError ? error.status : error instanceof z.ZodError ? 400 : 503;
-    if (status === 503) reportDatabaseFailure(error, 'query');
-    const message = error instanceof HttpError ? error.message : error instanceof z.ZodError ? 'Check your request values.' : 'The database is unavailable. Please retry shortly.';
-    send(response, status, { error: message });
+    const exportMatch=route.match(/^\/exports\/([^/]+)(?:\/(notify|download))?$/);
+    if(exportMatch){
+      const session=await auth.authorize(request);const record=await exportData(session.userId,exportMatch[1]);
+      if(method==='GET'&&!exportMatch[2])return send(response,200,record);
+      if(method==='GET'&&exportMatch[2]==='download'){if(!record.downloadUrl)throw new ServiceError('EXPORT_NOT_READY',409,'The archive is not ready.');response.writeHead(302,{Location:record.downloadUrl,'Cache-Control':'no-store'});response.end();return;}
+      if(method==='POST'&&exportMatch[2]==='notify'){
+        if(record.status!=='READY')throw new ServiceError('EXPORT_NOT_READY',409,'Complete the archive first.');
+        const claim=await db.storyExport.updateMany({where:{id:record.id,notificationStatus:'FAILED'},data:{notificationStatus:'QUEUED'}});
+        if(claim.count)try{await workflowRuntime.export(record.id);}catch{await db.storyExport.update({where:{id:record.id},data:{notificationStatus:'FAILED',errorCode:'WORKFLOW_START_FAILED'}});throw new ServiceError('WORKFLOW_START_FAILED',503,'Email processing could not start.');}
+        return send(response,202,{ok:true});
+      }
+    }
+    throw new ServiceError('NOT_FOUND',404,'API route not found.');
+  }catch(error){
+    if(error instanceof ServiceError)return send(response,error.status,{error:error.message,code:error.code});
+    if(error instanceof z.ZodError)return send(response,400,{error:'Check your request values.',code:'VALIDATION_FAILED'});
+    reportDatabaseFailure(error,'query');return send(response,503,{error:'The service is unavailable. Please retry shortly.'});
   }
 }

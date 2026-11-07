@@ -5,8 +5,7 @@ import { createServer } from 'node:http';
 import { createClient } from '@libsql/client';
 import { resolveDatabaseConfig } from './environment.ts';
 import { deployCloudSchema } from './cloudSchema.ts';
-import handler from '../api/index.ts';
-import { readFile } from 'node:fs/promises';
+import { handleApi as handler } from './api.ts';
 import { createDatabaseAccessor } from './databaseClient.ts';
 import { reportDatabaseFailure } from './databaseDiagnostics.ts';
 import { db } from './db.ts';
@@ -89,27 +88,13 @@ test('Vercel entrypoint preserves paths, media manifest and structured unknown-r
     assert.deepEqual(await (await fetch(base + '/api/v1/media-status?url=/media/missing.wav')).json(), { available: false });
     assert.equal((await fetch(base + '/api/v1/not-found')).status, 404);
     assert.equal((await fetch(base + '/api/media-status?url=/media/anansi-wisdom.wav')).status, 404);
-    const rewritten = await fetch(base + '/api?__oralia_path=v1/media-status&url=/media/anansi-wisdom.wav');
+    const rewritten = await fetch(base + '/api/v1/media-status?url=/media/anansi-wisdom.wav');
     assert.match(rewritten.headers.get('content-type') ?? '', /application\/json/);
     assert.deepEqual(await rewritten.json(), { available: true });
-    const unknown = await fetch(base + '/api?__oralia_path=v1/not-found');
+    const unknown = await fetch(base + '/api/v1/not-found');
     assert.equal(unknown.status, 404);
-    assert.deepEqual(await unknown.json(), { error: 'API route not found.' });
+    assert.deepEqual(await unknown.json(), { error: 'API route not found.', code:'NOT_FOUND' });
   } finally { await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve())); }
-});
-
-test('API rewrite precedes SPA fallback, which excludes static and public asset paths', async () => {
-  const config = JSON.parse(await readFile('vercel.json', 'utf8'));
-  assert.ok(config.functions['api/index.ts']);
-  const [api, spa] = config.rewrites as { source: string; destination: string }[];
-  const apiPattern = new RegExp(`^${api.source}$`);
-  const spaPattern = new RegExp(`^${spa.source}$`);
-  for (const path of ['/api/v1/health', '/api/v1/catalog', '/api/v1/stories/anansi-wisdom', '/api/unknown']) {
-    assert.equal(path.replace(apiPattern, api.destination), '/api?__oralia_path=' + path.slice(5));
-    assert.equal(spaPattern.test(path), false);
-  }
-  for (const path of ['/api', '/media/story.wav', '/assets/app.js', '/images/fallback/frame.svg', '/favicon.svg', '/robots.txt', '/missing.css']) assert.equal(spaPattern.test(path), false);
-  for (const path of ['/', '/discover', '/creators/example']) assert.equal(path.replace(spaPattern, spa.destination), '/index.html');
 });
 
 test('serverless health/catalog fail with JSON 503 and recover after missing configuration is corrected', async () => {
@@ -128,11 +113,11 @@ test('serverless health/catalog fail with JSON 503 and recover after missing con
   assert.ok(address && typeof address !== 'string');
   const base = `http://127.0.0.1:${address.port}`;
   try {
-    for (const path of ['/api/v1/health', '/api?__oralia_path=v1/catalog']) {
+    for (const path of ['/api/v1/health', '/api/v1/catalog']) {
       const response = await fetch(base + path);
       assert.equal(response.status, 503);
       assert.match(response.headers.get('content-type')!, /application\/json/);
-      assert.deepEqual(await response.json(), { error: 'The database is unavailable. Please retry shortly.' });
+      assert.deepEqual(await response.json(), { error: 'The service is unavailable. Please retry shortly.' });
     }
     process.env.VERCEL = '0';
     process.env.DATABASE_URL = 'file::memory:';

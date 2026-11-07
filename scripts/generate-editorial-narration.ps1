@@ -46,5 +46,5 @@ try {
     }
     $json = ConvertTo-Json -InputObject $results -Depth 8
     [System.IO.File]::WriteAllText((Join-Path $projectRoot $OutputPath), $json, (New-Object System.Text.UTF8Encoding($false)))
-    Write-Output ('Generated ' + $results.Count + ' original demo narrations with measured cue timings.')
+    Write-Output ('Generated ' + $results.Count + ' legacy editorial narrations with measured cue timings.')
 } finally { $voice.Dispose() }

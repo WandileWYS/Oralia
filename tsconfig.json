@@ -1,7 +1,11 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "lib": [
+      "ES2022",
+      "DOM",
+      "DOM.Iterable"
+    ],
     "module": "ESNext",
     "moduleResolution": "Bundler",
     "jsx": "react-jsx",
@@ -14,7 +18,19 @@
     "allowImportingTsExtensions": true,
     "resolveJsonModule": true,
     "noEmit": true,
-    "types": ["vite/client", "node"]
+    "types": [
+      "vite/client",
+      "node"
+    ]
   },
-  "include": ["src", "server", "api", "scripts", "prisma", "prisma.config.ts", "vite.config.ts"]
+  "include": [
+    "src",
+    "server",
+    "routes",
+    "workflows",
+    "scripts",
+    "prisma",
+    "prisma.config.ts",
+    "vite.config.ts"
+  ]
 }
