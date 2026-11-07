@@ -72,6 +72,6 @@ These rules apply to implementation work in this project. The local application 
 ## Hosting and provider preparation
 
 - Keep Turso credentials server-only and ignored. Runtime/seed resolve TURSO_DATABASE_URL plus TURSO_AUTH_TOKEN; explicit file DATABASE_URL wins only outside Vercel. Prisma CLI schema operations stay local. Never run tests against cloud merely because .env contains cloud credentials.
-- api/[...path].ts and Vite middleware share handleApi. Preserve raw request bodies, /api/v1 paths and origin checks. Generate Prisma/mediaManifest before checks; use the manifest for media availability, never runtime stat of public files. Builds must not contact a database.
+- api/index.ts and Vite middleware share handleApi. Preserve raw request bodies, /api/v1 paths and origin checks. Generate Prisma/mediaManifest before checks; use the manifest for media availability, never runtime stat of public files. Builds must not contact a database.
 - Cloud schema initialization is explicit, atomic, checksum-recorded and rejects unexpected schemas. No resets, automatic destructive updates, migration or seed on build/request. Read-only cloud verification is separate from isolated test writes.
 - PRESENTATION_MODE=true explicitly enables simulated PIN sign-in. Every current session is simulated and must never authorize paid image calls. The images endpoint returns truthful bundled placeholders; keep provider calls, secrets and raw errors out of client bundles. Real generation/storage and verified auth remain deferred.

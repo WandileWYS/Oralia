@@ -20,7 +20,7 @@ test('SQLite API: migrated catalog, PIN sessions, ownership, voice preferences a
   const seed = () => execFileSync(process.execPath, ['node_modules/tsx/dist/cli.mjs', 'prisma/seed.ts'], { env: { ...process.env, DATABASE_URL: url }, stdio: 'pipe' });
   seed();
   const { db } = await import('./db.ts');
-  const { default: handleApi } = await import('../api/[...path].ts');
+  const { default: handleApi } = await import('../api/index.ts');
   const server = createServer(async (request, response) => {
     if (request.headers['x-test-parsed-body'] === 'true') {
       let raw = '';
@@ -46,6 +46,12 @@ test('SQLite API: migrated catalog, PIN sessions, ownership, voice preferences a
       assert.equal(response.status, 200);
       const catalog = catalogSchema.parse(await response.json());
       assert.equal(catalog.stories.length, 8);
+      const rewritten = await fetch(`${origin}/api?__oralia_path=v1/catalog&collection=EPIC_AND_CHRONICLE`);
+      assert.equal(rewritten.status, 200);
+      assert.match(rewritten.headers.get('content-type') ?? '', /application\/json/);
+      assert.equal(catalogSchema.parse(await rewritten.json()).stories.length, 2);
+      assert.equal((await fetch(`${origin}/api?__oralia_path=v1/health`)).status, 200);
+      assert.equal((await fetch(`${origin}/api?__oralia_path=v1/stories/anansi-wisdom`)).status, 200);
       assert.equal(catalog.creators.length, 4);
       assert.equal(catalog.stories.filter(s=>s.collection==='FOLK_AND_FABLE').length,6); assert.equal(catalog.stories.filter(s=>s.collection==='EPIC_AND_CHRONICLE').length,2);
       assert.equal(catalogSchema.parse(await(await call('/catalog?collection=FOLK_AND_FABLE')).json()).stories.length,6);

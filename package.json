@@ -12,7 +12,7 @@
     "predev": "prisma generate && tsx scripts/generate-media.ts",
     "pretest": "prisma generate && tsx scripts/generate-media.ts",
     "preview": "vite preview --host 127.0.0.1",
-    "test": "tsx --test src/hooks/timeline.test.ts src/lib/storyboard.test.ts src/lib/education.test.ts src/lib/catalog.test.ts server/api.test.ts server/collectionMigration.test.ts server/deployment.test.ts server/images.test.ts",
+    "test": "tsx --test src/hooks/timeline.test.ts src/lib/storyboard.test.ts src/lib/education.test.ts src/lib/catalog.test.ts server/api.test.ts server/collectionMigration.test.ts server/deployment.test.ts server/images.test.ts src/lib/api.test.ts",
     "db:deploy:turso": "tsx scripts/deploy-turso.ts",
     "db:verify:turso": "tsx scripts/verify-turso.ts",
     "db:generate": "prisma generate",

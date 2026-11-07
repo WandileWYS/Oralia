@@ -5,7 +5,8 @@ import { createServer } from 'node:http';
 import { createClient } from '@libsql/client';
 import { resolveDatabaseConfig } from './environment.ts';
 import { deployCloudSchema } from './cloudSchema.ts';
-import handler from '../api/[...path].ts';
+import handler from '../api/index.ts';
+import { readFile } from 'node:fs/promises';
 
 test('database selection keeps tests local and requires complete hosted credentials', () => {
   const cloud = { TURSO_DATABASE_URL: 'libsql://example.turso.io', TURSO_AUTH_TOKEN: 'test-only' };
@@ -44,5 +45,25 @@ test('Vercel entrypoint preserves paths, media manifest and structured unknown-r
     assert.deepEqual(await (await fetch(base + '/api/v1/media-status?url=/media/missing.wav')).json(), { available: false });
     assert.equal((await fetch(base + '/api/v1/not-found')).status, 404);
     assert.equal((await fetch(base + '/api/media-status?url=/media/anansi-wisdom.wav')).status, 404);
+    const rewritten = await fetch(base + '/api?__oralia_path=v1/media-status&url=/media/anansi-wisdom.wav');
+    assert.match(rewritten.headers.get('content-type') ?? '', /application\/json/);
+    assert.deepEqual(await rewritten.json(), { available: true });
+    const unknown = await fetch(base + '/api?__oralia_path=v1/not-found');
+    assert.equal(unknown.status, 404);
+    assert.deepEqual(await unknown.json(), { error: 'API route not found.' });
   } finally { await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve())); }
+});
+
+test('API rewrite precedes SPA fallback, which excludes static and public asset paths', async () => {
+  const config = JSON.parse(await readFile('vercel.json', 'utf8'));
+  assert.ok(config.functions['api/index.ts']);
+  const [api, spa] = config.rewrites as { source: string; destination: string }[];
+  const apiPattern = new RegExp(`^${api.source}$`);
+  const spaPattern = new RegExp(`^${spa.source}$`);
+  for (const path of ['/api/v1/health', '/api/v1/catalog', '/api/v1/stories/anansi-wisdom', '/api/unknown']) {
+    assert.equal(path.replace(apiPattern, api.destination), '/api?__oralia_path=' + path.slice(5));
+    assert.equal(spaPattern.test(path), false);
+  }
+  for (const path of ['/api', '/media/story.wav', '/assets/app.js', '/images/fallback/frame.svg', '/favicon.svg', '/robots.txt', '/missing.css']) assert.equal(spaPattern.test(path), false);
+  for (const path of ['/', '/discover', '/creators/example']) assert.equal(path.replace(spaPattern, spa.destination), '/index.html');
 });

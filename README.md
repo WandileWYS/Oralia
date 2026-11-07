@@ -119,7 +119,7 @@ The libSQL dependencies are already installed. Run npm run db:deploy:turso to in
 
 Run npx prisma db seed and npm run db:verify:turso with cloud runtime credentials. Repeated seeding upserts eight sourced stories, 32 scenes and four editorial profiles while retaining unrelated users and content. Local demo accounts and sessions are not transferred. Do not run schema deployment or seeding from builds or functions.
 
-For Vercel, use the Vite preset, npm run build and dist output. Configure TURSO_DATABASE_URL, TURSO_AUTH_TOKEN and PRESENTATION_MODE=true in the chosen Vercel environment. api/[...path].ts serves /api/v1/* as a Node function; narration and fallback images are static public assets. Build generates Prisma and the media manifest, then type-checks and bundles without database access. Runtime media-status uses that manifest rather than filesystem reads. No Vercel project has been published by these scripts.
+For Vercel, use the Vite preset, npm run build and dist output. Configure TURSO_DATABASE_URL, TURSO_AUTH_TOKEN and PRESENTATION_MODE=true in the chosen Vercel environment. api/index.ts serves /api/v1/* as a Node function; narration and fallback images are static public assets. Build generates Prisma and the media manifest, then type-checks and bundles without database access. Runtime media-status uses that manifest rather than filesystem reads. No Vercel project has been published by these scripts.
 
 PRESENTATION_MODE=true enables the explicitly labeled PIN simulator. It accepts any six digits and sends no email; it is not secure email ownership verification. Omit or set false to disable creation of demo challenges and sessions. Demo sessions can never authorize paid image generation.
 

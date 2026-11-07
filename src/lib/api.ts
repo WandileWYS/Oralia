@@ -24,6 +24,9 @@ export function readSession() {
 export async function request<T>(path: string, schema: z.ZodType<T>, options: RequestInit = {}): Promise<T> {
   const session = readSession();
   const response = await fetch(`/api/v1${path}`, { ...options, headers: { 'Content-Type': 'application/json', ...(session ? { Authorization: `Bearer ${session.token}` } : {}), ...options.headers } });
+  if (!/\bapplication\/(?:[\w.-]+\+)?json\b/i.test(response.headers.get('content-type') ?? '')) {
+    throw new Error(`The API returned a non-JSON response (HTTP ${response.status}). Check the serverless deployment and API routing.`);
+  }
   const data: unknown = await response.json();
   if (!response.ok) {
     const error = z.object({ error: z.string() }).safeParse(data);
