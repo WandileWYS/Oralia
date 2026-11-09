@@ -8,7 +8,7 @@ A single `HTMLAudioElement.currentTime` is the clock. Browser `timeupdate` frequ
 
 Use continuous half-open scene ranges. Exact-boundary seeking selects the scene beginning there. Prefetch/decode the next images, retain the previous image if loading fails, and keep captions/narration available. Disable duration-dependent controls until finite metadata arrives. Stop the paint loop on unmount/pause/hidden tabs and release recording streams and object URLs.
 
-Gemini's proposed image times are narrative suggestions. Once the polished text replaces the source narration, source timestamps no longer describe the final track. Oralia synthesizes four PCM segments at 24 kHz, mono, 16-bit and measures actual sample counts. Final starts/ends and assembled duration use these samples. Cloudinary may rewrite WAV metadata; sample content and rate must remain intact. Preserve proposed timestamps separately for provenance.
+Gemini's proposed image times are narrative suggestions. Once the polished text replaces the source narration, source timestamps no longer describe the final track. Oralia synthesizes variable-length PCM segments at 24 kHz, mono, 16-bit and measures actual sample counts. Final starts/ends and assembled duration use these samples. Cloudinary may rewrite WAV metadata; sample content and rate must remain intact. Preserve proposed timestamps separately for provenance.
 
 Transcription model capabilities and size/format constraints differ. The application limit is five minutes / 20 MB, below the documented completed-file transcription cap. Transcription is not used to fabricate polished-track timing. [OpenAI speech-to-text](https://developers.openai.com/api/docs/guides/speech-to-text), [OpenAI text-to-speech](https://developers.openai.com/api/docs/guides/text-to-speech)
 
@@ -20,7 +20,7 @@ Random six-digit codes are keyed-hashed, expire after ten minutes, permit five a
 
 ## Structured production generation
 
-The exact Gemini `gemini-3.5-flash-lite` model receives culturally conservative instructions and a strict four-scene JSON schema. Reject missing, blocked, empty, inconsistent, or oversized output. Keep original text/transcript, polished text, prompts, language, and provenance. The joined narration must equal the polished story. Structured output still requires runtime semantic validation. [Gemini structured output](https://ai.google.dev/gemini-api/docs/structured-output)
+The exact Gemini `gemini-3.5-flash-lite` model receives culturally conservative instructions and a strict dynamic-scene JSON schema. Reject missing, blocked, empty, inconsistent, or oversized output. Keep original text/transcript, polished text, prompts, language, and provenance. The joined narration must equal the polished story. Structured output still requires runtime semantic validation. [Gemini structured output](https://ai.google.dev/gemini-api/docs/structured-output)
 
 OpenAI provides real transcription, `tts-1-hd` narration, and scene images (initial configured image model `gpt-image-2.5-sunburst`). Missing keys/model access must produce explicit job failures. No sample narration, fabricated success, pre-curated replacement photos, or placeholder illustrations may complete a failed generated story. Provider mocks are restricted to isolated tests. [OpenAI image generation](https://developers.openai.com/api/docs/guides/image-generation)
 
@@ -33,7 +33,7 @@ A confirmed transient failure can retry within a bounded budget. A dropped conne
 | Folk & Fable | Warm illustrated folklore; expressive characters, clear silhouettes, coherent natural light, gentle palette; preserve cultural/source specificity | Review moral claims and historical context; no automatic classroom suitability claim |
 | Epic & Chronicle | Cinematic editorial composition, layered environments, considered contrast, historical depth and visual restraint | Review chronology, ancestry, cultural representation, conflict and invented detail |
 
-Apply a common visual bible across four prompts: named character descriptions, consistent clothing/environment, palette, medium, perspective and recurring objects. Keep literary collection separate from region, tradition, language, consent, and content review. Do not invent translations or imply endorsement by a community. Existing historical adaptations preserve their sources and the distinction between editorial photographs and newly generated illustrations.
+Apply a common visual bible across all scene prompts: named character descriptions, consistent clothing/environment, palette, medium, perspective and recurring objects. Keep literary collection separate from region, tradition, language, consent, and content review. Do not invent translations or imply endorsement by a community. Existing historical adaptations preserve their sources and the distinction between editorial photographs and newly generated illustrations.
 
 ## Durable storage, publication, and export
 
@@ -53,9 +53,21 @@ Network or codec failure displays retry and transcript access, not substitute co
 
 ## Operational gaps and verification gates
 
-- A passing isolated suite verifies contracts with mocked providers, not paid account/model access or inbox receipt. A real integration run must cover SMTP verification, STT, structured polishing, four images, measured narration, persistence, playback, publication and authorized ZIP download.
+- A passing isolated suite verifies contracts with mocked providers, not paid account/model access or inbox receipt. A real integration run must cover SMTP verification, STT, structured polishing, all scene images, measured narration, persistence, playback, publication and authorized ZIP download.
 - Real OpenAI calls may be deliberately skipped while the user configures credentials; report that gap and fail affected runtime operations clearly. Never mark generation verified based on fixture output.
 - Vercel environment secrets, Workflow availability, function limits, and live routing require hosted verification after deployment. Builds and Prisma generation must not contact a database.
 - Preserve accounts/bookmarks/catalog during migration, but revoke simulated sessions/challenges. Back up before cloud schema writes and refuse unexpected schemas.
 - Retention/cleanup of abandoned private drafts, operator reconciliation of indeterminate provider/dispatch/send outcomes, school editorial processes, and offline PWA delivery need explicit operational ownership.
 - Public media promotion can complete before its catalog transaction; failed publication can leave unlisted versioned assets. Retry should recover these copies. Long-term cleanup must avoid removing assets referenced by published versions or completed exports.
+
+## Dynamic generation update — 9 November 2026
+
+Creation is asynchronous: QUEUED → SCRIPT_READY → PROCESSING_MEDIA → COMPLETED, with FAILED/INDETERMINATE error states. Gemini dynamically chooses visual beats at roughly 15–30 seconds of narration per scene, within a safety ceiling of 64 scenes. One-minute narratives target 3–4 scenes; five-minute narratives target 12–20 or more. Historical seeded stories keep their existing four scenes.
+
+Workflow launches at most two narration steps, then two image steps per iteration. Each paid request has its own durable step and bounded retry; completed assets are reused and ambiguous paid outcomes require review. Narration WAV responses stream directly to authenticated Cloudinary upload streams. Image API Base64 JSON requires a bounded per-image decode before upload; no local media files are written. Final assembly measures actual PCM samples. Gemini boundaries remain estimates; GET /api/v1/creations/:id exposes measured boundaries and formatted MM:SS.mmm timestamps when complete.
+
+CreationJob persists totalScenes, processedScenes and independent notificationStatus. The status response includes completionPercentage (up to 95% during media preparation; 100% only after final assembly). COMPLETED means a private draft is ready for review, never automatic publication. Completion email uses real Gmail SMTP; POST /api/v1/creations/:id/notify retries a failed email without regenerating media. Interrupted SENDING notifications require operator reconciliation.
+
+OPENAI_API_KEY is server-only. Unset or blank OPENAI_STT_MODEL, OPENAI_TTS_MODEL and OPENAI_TTS_VOICE default to whisper-1, tts-1-hd and onyx. The existing configurable GPT image model remains selected; no automatic legacy DALL·E substitution occurs. Run db:migrate:turso for the reviewed dynamic-scene migration from the previous production schema, or db:migrate for local SQLite. Cloud verification compares logical column/index definitions, ignoring physical column ordinals after ALTER TABLE.
+
+The Gemini provider returns the complete polished narrative as ordered scene narrations. The server assembles polishedText exactly from those narrations, avoiding divergent duplicate story text. The original transcript remains separately preserved.

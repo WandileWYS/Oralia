@@ -33,7 +33,8 @@ test('measured PCM boundaries, not proposed model estimates, determine final nar
   assert.deepEqual(result.boundaries.map(frame=>[frame.startTime,frame.endTime]),[[0,1],[1,3],[3,3.5],[3.5,5]]);assert.equal(result.duration,5);assert.deepEqual(readWavePcm(result.bytes),Buffer.concat(pcm));assert.deepEqual(readWavePcm(pcmToWave(pcm[0])),pcm[0]);assert.throws(()=>readWavePcm(Buffer.from('not audio')));assert.throws(()=>assembleNarration([Buffer.alloc(3)]));
 });
 test('creation contracts reject unsupported collections, oversized submissions and inconsistent model output',()=>{
-  assert.ok(inputSchema.safeParse(input).success);assert.ok(!inputSchema.safeParse({...input,text:'x'.repeat(5001)}).success);assert.ok(!inputSchema.safeParse({...input,sourceAssetId:'other'}).success);assert.ok(!inputSchema.safeParse({...input,collection:'ALL'}).success);
+  assert.ok(inputSchema.safeParse(input).success);assert.ok(!inputSchema.safeParse({...input,text:'x'.repeat(12001)}).success);assert.ok(!inputSchema.safeParse({...input,sourceAssetId:'other'}).success);assert.ok(!inputSchema.safeParse({...input,collection:'ALL'}).success);
+  for(const count of [1,4,16,24,64]){const dynamic=Array.from({length:count},(_,i)=>({...scenes[0],narration:'Scene '+i+'.',proposedStartSeconds:i*20}));assert.ok(polishedPlanSchema.safeParse({polishedText:dynamic.map(s=>s.narration).join('\n\n'),scenes:dynamic}).success);assert.equal(assembleNarration(dynamic.map(()=>Buffer.alloc(48000))).boundaries.length,count);}
   assert.ok(polishedPlanSchema.safeParse(plan).success);assert.ok(!polishedPlanSchema.safeParse({...plan,polishedText:'Unrelated story'}).success);assert.ok(!polishedPlanSchema.safeParse({...plan,scenes:[...scenes].reverse()}).success);
 });
 test('real provider adapters validate transcripts, strict Gemini JSON, PCM and image bytes',async()=>{

@@ -29,11 +29,11 @@ export async function packageVersion(id:string) {
     let exists=false;try{await inspectAsset(publicId,'raw');exists=true;}catch{/* Build only when no completed archive can be recovered. */}
     if(!exists){
       const zip=new JSZip();const assets=[];
-      for(let index=0;index<4;index++){
+      for(let index=0;index<snapshot.scenes.length;index++){
         const scene=snapshot.scenes[index];const bytes=await readMedia(downloadUrl(scene.publicId,'png','image'),20*1024*1024);const filename=`images/scene-${index+1}.png`;
         zip.file(filename,bytes);assets.push({...scene,filename,sha256:createHash('sha256').update(bytes).digest('hex')});
       }
-      const audio=await readMedia(downloadUrl(snapshot.audio.publicId,'wav','video'),30*1024*1024);zip.file('narration.wav',audio);
+      const audio=await readMedia(downloadUrl(snapshot.audio.publicId,'wav','video'),100*1024*1024);zip.file('narration.wav',audio);
       zip.file('manifest.json',JSON.stringify({schemaVersion:'oralia-storyboard-v4',versionId:version.id,storyId:version.storyId,collection:snapshot.input.collection,title:snapshot.input.title,provenance:snapshot.input.provenance,voiceType:'STUDIO_AI',audio:{filename:'narration.wav',duration:snapshot.audio.duration,sha256:createHash('sha256').update(audio).digest('hex')},scenes:assets},null,2));
       zip.file('transcript.txt',snapshot.transcript);zip.file('polished-story.txt',snapshot.plan.polishedText);
       await storeBytes(await zip.generateAsync({type:'nodebuffer'}),publicId,'raw','zip');

@@ -47,7 +47,7 @@ The UI never substitutes a catalog fixture when fetch fails. Direct story/profil
 
 `StoryCollection` is exactly `FOLK_AND_FABLE | EPIC_AND_CHRONICLE`. `CollectionFilter` additionally allows UI-only `ALL`. Region/tradition is independent. One `Story.presentation` contains approved style metadata and keyframes; collection is literary character, not an audience rating.
 
-`CreationInput`, `PolishedPlan`, `CreationJob`, and export responses are validated by `src/types/creation.ts`. Untrusted provider JSON must match all four scene records; joined scene narration must equal the polished text, within 5,000 characters. Proposed times start at zero and increase, but are not authoritative playback boundaries.
+`CreationInput`, `PolishedPlan`, `CreationJob`, and export responses are validated by `src/types/creation.ts`. Untrusted provider JSON must match all variable scene records; joined scene narration must equal the polished text, within 12,000 characters. Proposed times start at zero and increase, but are not authoritative playback boundaries.
 
 Illustrative request/response examples below are documentation, never runtime fallback data.
 
@@ -94,7 +94,7 @@ Illustrative request/response examples below are documentation, never runtime fa
 }
 ```
 
-Use either `text` or a verified owned `sourceAssetId`, never both. Creator Studio's production selection is concrete and defaults to Folk & Fable when browsing All Collections. Export manifest version is `oralia-storyboard-v4`, with immutable `versionId`, concrete `collection`, narration filename/duration/checksum, four ordered scene prompts, proposed and measured boundaries, image filenames/checksums, and provenance.
+Use either `text` or a verified owned `sourceAssetId`, never both. Creator Studio's production selection is concrete and defaults to Folk & Fable when browsing All Collections. Export manifest version is `oralia-storyboard-v4`, with immutable `versionId`, concrete `collection`, narration filename/duration/checksum, ordered scene prompts, proposed and measured boundaries, image filenames/checksums, and provenance.
 
 ### Education browsing
 
@@ -144,14 +144,14 @@ The production migration adds columns/tables without rebuilding/deleting stories
 
 ## Durable creation lifecycle
 
-`QUEUED → RUNNING → REVIEW_READY`; errors become `FAILED` with an explicit retry classification or `INDETERMINATE` for an unknown paid result. Persist progress before/after each bounded provider operation. Dispatch claims prevent duplicate initial starts; unique owner/request and job/asset-slot keys protect retries. Workflow steps have at most two automatic retries.
+`QUEUED → PROCESSING_MEDIA → COMPLETED`; errors become `FAILED` with an explicit retry classification or `INDETERMINATE` for an unknown paid result. Persist progress before/after each bounded provider operation. Dispatch claims prevent duplicate initial starts; unique owner/request and job/asset-slot keys protect retries. Workflow steps have at most two automatic retries.
 
 1. Signed direct upload; server verifies Cloudinary identity, authenticated delivery, actual format, size, duration, and ownership. Audio input limit is five minutes / 20 MB. Typed text is an explicit alternative.
-2. OpenAI transcription (`gpt-4o-transcribe` default), or persist submitted text.
-3. Exact Gemini `gemini-3.5-flash-lite`: strict polished text plus four scenes, cultural/source-preserving instructions, reject blocked/empty/malformed output.
-4. Four `tts-1-hd` requests with one voice (`onyx` default), raw 24 kHz mono 16-bit PCM. Store each completed scene privately.
-5. Four OpenAI images (`gpt-image-2.5-sunburst` initially), validated PNGs uploaded privately. Missing config or rejection fails the job, never a placeholder.
-6. Fetch completed audio segments, count samples, assemble WAV, calculate continuous authoritative boundaries, save immutable snapshot, mark REVIEW_READY.
+2. OpenAI transcription (`whisper-1` default), or persist submitted text.
+3. Exact Gemini `gemini-3.5-flash-lite`: strict polished text plus dynamically planned scenes (1–64), cultural/source-preserving instructions, reject blocked/empty/malformed output.
+4. Variable-length `tts-1-hd` requests with one voice (`onyx` default), raw 24 kHz mono 16-bit PCM. Store each completed scene privately.
+5. Variable-length OpenAI images (`gpt-image-2.5-sunburst` initially), validated PNGs uploaded privately. Missing config or rejection fails the job, never a placeholder.
+6. Fetch completed audio segments, count samples, assemble WAV, calculate continuous authoritative boundaries, save immutable snapshot, mark COMPLETED.
 7. Creator edits create a fresh immutable job/version with affected media invalidated. Explicit review is required for publication; reject stale versions and foreign owners.
 
 Network failures after potentially accepted paid requests are ambiguous: keep known assets, attempt recovery by reserved Cloudinary identity, otherwise require creator review. Never repeat an uncertain charge automatically. Completed versions remain private until promotion. Storage cleanup/retention of abandoned drafts and operator reconciliation of interrupted dispatch/sends remain operational responsibilities.
@@ -194,3 +194,15 @@ Workflow packages an owned immutable snapshot into ZIP, stores it privately, mar
 4. **Discovery and curation:** Shared collections/region intersections, direct links, creator ownership, published catalog refresh. Offline/partial-download UI and bounded PWA storage remain future work; bookmarks do not cache audio.
 
 Run Prisma validation, isolated migration/domain/API/provider tests, then build sequentially. Validate actual packaged Node handlers plus API/static/Workflow routing. Check 320/390/768/1440 px in both themes, all seeded bylines and listening rooms, scene boundaries, OTP/header restoration, errors and export access. Real integration must separately prove inbox receipt, exact model access, media delivery/seeking, Workflow execution, and paid generation; compilation alone cannot establish these.
+
+## Dynamic generation update — 9 November 2026
+
+Creation is asynchronous: QUEUED → SCRIPT_READY → PROCESSING_MEDIA → COMPLETED, with FAILED/INDETERMINATE error states. Gemini dynamically chooses visual beats at roughly 15–30 seconds of narration per scene, within a safety ceiling of 64 scenes. One-minute narratives target 3–4 scenes; five-minute narratives target 12–20 or more. Historical seeded stories keep their existing four scenes.
+
+Workflow launches at most two narration steps, then two image steps per iteration. Each paid request has its own durable step and bounded retry; completed assets are reused and ambiguous paid outcomes require review. Narration WAV responses stream directly to authenticated Cloudinary upload streams. Image API Base64 JSON requires a bounded per-image decode before upload; no local media files are written. Final assembly measures actual PCM samples. Gemini boundaries remain estimates; GET /api/v1/creations/:id exposes measured boundaries and formatted MM:SS.mmm timestamps when complete.
+
+CreationJob persists totalScenes, processedScenes and independent notificationStatus. The status response includes completionPercentage (up to 95% during media preparation; 100% only after final assembly). COMPLETED means a private draft is ready for review, never automatic publication. Completion email uses real Gmail SMTP; POST /api/v1/creations/:id/notify retries a failed email without regenerating media. Interrupted SENDING notifications require operator reconciliation.
+
+OPENAI_API_KEY is server-only. Unset or blank OPENAI_STT_MODEL, OPENAI_TTS_MODEL and OPENAI_TTS_VOICE default to whisper-1, tts-1-hd and onyx. The existing configurable GPT image model remains selected; no automatic legacy DALL·E substitution occurs. Run db:migrate:turso for the reviewed dynamic-scene migration from the previous production schema, or db:migrate for local SQLite. Cloud verification compares logical column/index definitions, ignoring physical column ordinals after ALTER TABLE.
+
+The Gemini provider returns the complete polished narrative as ordered scene narrations. The server assembles polishedText exactly from those narrations, avoiding divergent duplicate story text. The original transcript remains separately preserved.

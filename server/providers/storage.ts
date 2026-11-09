@@ -49,3 +49,20 @@ export async function readMedia(url: string, maxBytes: number) {
     return Buffer.concat(chunks);
   } catch { throw new ServiceError('MEDIA_READ_FAILED', 503, 'Media could not be read.', true); }
 }
+
+/** Pipe a bounded provider response directly into private Cloudinary storage; no local files. */
+export async function storeStream(body:ReadableStream<Uint8Array>,publicId:string,resourceType:'video',format:string) {
+  const {Readable,Transform}=await import('node:stream');
+  const {pipeline}=await import('node:stream/promises');
+  const hash=createHash('sha256');let length=0;
+  const meter=new Transform({transform(chunk:Buffer,_encoding,callback){length+=chunk.length;if(length>20*1024*1024){callback(new Error('Media exceeds limit'));return;}hash.update(chunk);callback(null,chunk);}});
+  try{
+    let result:UploadApiResponse|undefined;
+    const uploaded=new Promise<UploadApiResponse>((resolve,reject)=>{
+      const sink=mediaCloud().uploader.upload_stream({public_id:publicId,resource_type:resourceType,type:'authenticated',overwrite:false,format,timeout:180000},(error,value)=>error||!value?reject(new Error('Upload failed')):resolve(value));
+      void pipeline(Readable.fromWeb(body as import('node:stream/web').ReadableStream<Uint8Array>),meter,sink).catch(reject);
+    });
+    result=await uploaded;
+    return {result,checksum:hash.digest('hex')};
+  }catch{throw new ServiceError('MEDIA_UPLOAD_FAILED',503,'Narration storage was not confirmed.',false,true);}
+}

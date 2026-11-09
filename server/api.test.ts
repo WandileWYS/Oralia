@@ -15,7 +15,7 @@ import { toNodeHandler } from 'srvx/node';
 test('production API: secure emailed codes, cookies, ownership and persisted creation jobs',async t=>{
   await mkdir('.qa',{recursive:true});const file=`.qa/production-api-${randomUUID()}.db`;const url=`file:./${file}`;
   const sqlite=createClient({url});
-  for(const migration of ['20261105000000_init','20261106000000_thematic_collections','20261107000000_production_pipeline'])await sqlite.executeMultiple(await readFile(`prisma/migrations/${migration}/migration.sql`,'utf8'));
+  for(const migration of ['20261105000000_init','20261106000000_thematic_collections','20261107000000_production_pipeline','20261109000000_dynamic_scenes'])await sqlite.executeMultiple(await readFile(`prisma/migrations/${migration}/migration.sql`,'utf8'));
   sqlite.close();
   Object.assign(process.env,{DATABASE_URL:url,AUTH_SECRET:'production-test-only-secret-32-characters-long',APP_ORIGIN:'http://127.0.0.1',SMTP_HOST:'smtp.example.test',SMTP_PORT:'587',SMTP_USER:'sender@example.test',SMTP_PASSWORD:'test-only',OPENAI_API_KEY:'test-only',GEMINI_API_KEY:'test-only',CLOUDINARY_CLOUD_NAME:'test-only',CLOUDINARY_API_KEY:'test-only',CLOUDINARY_API_SECRET:'test-only'});
   delete process.env.VERCEL;
@@ -67,13 +67,13 @@ test('production API: secure emailed codes, cookies, ownership and persisted cre
       const input={title:'A river remembers',text:'A traveler follows a river and learns to listen.',collection:'FOLK_AND_FABLE',region:'originals',language:'en',provenance:'An original story written for this isolated test.'};const requestKey=randomUUID();
       assert.equal((await call('/creations','POST',{input,requestKey})).status,401);const response=await call('/creations','POST',{input,requestKey},first.cookie);assert.equal(response.status,202);const job=await response.json();assert.equal(job.status,'QUEUED');assert.equal((await call('/creations/'+job.id,'GET',undefined,second.cookie)).status,404);
       assert.equal((await call('/creations','POST',{input,requestKey},first.cookie)).status,202);assert.equal(await db.creationJob.count(),1);assert.equal(launches.length,1);
-      assert.equal((await call('/creations','POST',{input:{...input,text:'x'.repeat(5001)},requestKey:randomUUID()},first.cookie)).status,400);
+      assert.equal((await call('/creations','POST',{input:{...input,text:'x'.repeat(12001)},requestKey:randomUUID()},first.cookie)).status,400);
       delete process.env.OPENAI_API_KEY;assert.equal((await call('/creations','POST',{input,requestKey:randomUUID()},first.cookie)).status,503);process.env.OPENAI_API_KEY='test-only';assert.equal((await call('/images/keyframe','POST',{},first.cookie)).status,404);
       const multilingual={...input,text:'Thandé follows the river and listens to her grandmother’s story.'};const unicodeKey=randomUUID();const encoded=Buffer.from(JSON.stringify({input:multilingual,requestKey:unicodeKey}));const split=encoded.indexOf(Buffer.from('é'))+1;
       const stream=new ReadableStream<Uint8Array>({start(controller){controller.enqueue(encoded.subarray(0,split));setTimeout(()=>{controller.enqueue(encoded.subarray(split));controller.close();},5);}});
       const streamed=await application.fetch(new Request(base+'/api/v1/creations',{method:'POST',headers:{'Content-Type':'application/json',Cookie:first.cookie},body:stream,duplex:'half'} as RequestInit));assert.equal(streamed.status,202);
       assert.equal(JSON.parse((await db.creationJob.findUniqueOrThrow({where:{userId_requestKey:{userId:first.session.id,requestKey:unicodeKey}}})).inputJson).text,multilingual.text);
-      assert.equal((await call('/auth/otp/request','POST',{email:'x'.repeat(128*1024)})).status,413);
+      assert.equal((await call('/auth/otp/request','POST',{email:'x'.repeat(2*1024*1024)})).status,413);
       await db.creationJob.updateMany({where:{userId:first.session.id},data:{status:'FAILED',retryable:false}});dispatchUnknown=true;const unknownKey=randomUUID();assert.equal((await call('/creations','POST',{input,requestKey:unknownKey},first.cookie)).status,503);dispatchUnknown=false;
       const unconfirmed=await db.creationJob.findUniqueOrThrow({where:{userId_requestKey:{userId:first.session.id,requestKey:unknownKey}}});assert.equal(unconfirmed.status,'INDETERMINATE');assert.equal(unconfirmed.retryable,false);assert.equal((await call('/creations/'+unconfirmed.id+'/retry','POST',{},first.cookie)).status,409);
     });

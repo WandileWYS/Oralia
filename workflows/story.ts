@@ -6,9 +6,14 @@ export async function createStoryWorkflow(jobId:string) {
   'use workflow';
   await creationStep(jobId,'transcript');
   await creationStep(jobId,'polish');
-  for(let index=0;index<4;index++)await creationStep(jobId,'narration',index);
-  for(let index=0;index<4;index++)await creationStep(jobId,'image',index);
+  const count=await sceneCountStep(jobId);
+  for(let start=0;start<count;start+=2){
+    const indices=Array.from({length:Math.min(2,count-start)},(_,offset)=>start+offset);
+    await Promise.all(indices.map(index=>creationStep(jobId,'narration',index)));
+    await Promise.all(indices.map(index=>creationStep(jobId,'image',index)));
+  }
   await creationStep(jobId,'finalize');
+  await completionEmailStep(jobId);
 }
 async function creationStep(id:string,stage:'transcript'|'polish'|'narration'|'image'|'finalize',index=0) {
   'use step';
@@ -57,3 +62,19 @@ async function notificationStep(exportId:string) {
   await notifyExport(exportId);
 }
 notificationStep.maxRetries=2;
+
+async function sceneCountStep(id:string){
+  'use step';
+  const {scriptSceneCount}=await import('../server/pipeline.ts');
+  return scriptSceneCount(id);
+}
+export async function creationEmailWorkflow(id:string){
+  'use workflow';
+  await completionEmailStep(id);
+}
+async function completionEmailStep(id:string){
+  'use step';
+  const {notifyCreation}=await import('../server/creationNotification.ts');
+  await notifyCreation(id);
+}
+completionEmailStep.maxRetries=2;

@@ -16,7 +16,7 @@ African oral traditions deserve publishing tools that require less editing, rend
 
 ## Technical Approach
 
-Real recordings pass through OpenAI transcription, then Gemini `gemini-3.5-flash-lite` returns a polished story and four structured scenes. OpenAI `tts-1-hd` produces narration for each scene; OpenAI image generation illustrates the scene prompts. Final boundaries come from measured PCM samples, not estimated model timestamps.
+Real recordings pass through OpenAI transcription, then Gemini `gemini-3.5-flash-lite` returns a polished story and dynamically structured scenes. OpenAI `tts-1-hd` produces narration for each scene; OpenAI image generation illustrates the scene prompts. Final boundaries come from measured PCM samples, not estimated model timestamps.
 
 Vercel Workflow runs durable processing stages. Cloudinary stores media bytes; Turso stores ownership, transcripts, versions, asset metadata, and job progress. Draft media and exports remain authenticated. Publication requires explicit creator review and promotes completed media for public playback.
 
@@ -54,7 +54,7 @@ Development listens at `http://127.0.0.1:5173`; set `APP_ORIGIN` to that exact o
 | `GEMINI_API_KEY` | Access to the exact `gemini-3.5-flash-lite` model |
 | `OPENAI_API_KEY` | Real transcription, narration, and image generation |
 | `OPENAI_IMAGE_MODEL` | Initially `gpt-image-2.5-sunburst`; account access must be verified |
-| `OPENAI_STT_MODEL`, `OPENAI_TTS_VOICE` | Defaults `gpt-4o-transcribe` and `onyx`; synthesis uses `tts-1-hd` |
+| `OPENAI_STT_MODEL`, `OPENAI_TTS_VOICE` | Defaults `whisper-1` and `onyx`; synthesis uses `tts-1-hd` |
 | `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET` | Signed source uploads, private drafts, published media, and ZIP delivery |
 
 Missing provider configuration disables the affected operation with an explicit server error. Public editorial browsing remains independent of AI keys. The sourced eight-story catalog remains published legacy content; its photographs are not represented as newly generated artwork.
@@ -63,9 +63,9 @@ Missing provider configuration disables the affected operation with an explicit 
 
 Email codes expire after ten minutes, permit five attempts, and have a sixty-second resend cooldown plus persistent email/IP rate limits. Only hashed codes and session credentials are stored. Sessions use HttpOnly, SameSite cookies and Secure cookies in production. No arbitrary PINs or browser bearer credentials are accepted.
 
-Creators may submit audio up to **five minutes / 20 MB**, or text up to **5,000 characters**, with source context and permission. Every generated story has **four scenes**. The Studio shows persisted progress, private previews, failures, safe retries, new immutable versions, and explicit publication review. Unconfirmed paid-provider results require review rather than automatic regeneration.
+Creators may submit audio up to **five minutes / 20 MB**, or text up to **12,000 characters**, with source context and permission. Every generated story has **dynamically planned scenes (1–64)**. The Studio shows persisted progress, private previews, failures, safe retries, new immutable versions, and explicit publication review. Unconfirmed paid-provider results require review rather than automatic regeneration.
 
-Exports are generated from immutable database versions. The ZIP includes narration, four images, source transcript, polished text, and the `oralia-storyboard-v4` manifest with checksums. Email links require the owning account before minting a short-lived media download. Email failures do not rebuild completed archives. SMTP is at-least-once delivery; an interrupted send may require operator investigation.
+Exports are generated from immutable database versions. The ZIP includes narration, all scene images, source transcript, polished text, and the `oralia-storyboard-v4` manifest with checksums. Email links require the owning account before minting a short-lived media download. Email failures do not rebuild completed archives. SMTP is at-least-once delivery; an interrupted send may require operator investigation.
 
 ## Database and Vercel Deployment
 
@@ -85,3 +85,15 @@ npm run db:verify:turso
 ```
 
 Tests migrate temporary SQLite databases and mock providers only inside isolated test processes. Production code has no generated-content fallback. Run actual provider integration separately with configured keys; do not infer real generation success from fixtures. See [ARCHITECTURE.md](ARCHITECTURE.md), [RESEARCH.md](RESEARCH.md), and [AGENTS.md](AGENTS.md) for maintained contracts and contributor rules.
+
+## Dynamic generation update — 9 November 2026
+
+Creation is asynchronous: QUEUED → SCRIPT_READY → PROCESSING_MEDIA → COMPLETED, with FAILED/INDETERMINATE error states. Gemini dynamically chooses visual beats at roughly 15–30 seconds of narration per scene, within a safety ceiling of 64 scenes. One-minute narratives target 3–4 scenes; five-minute narratives target 12–20 or more. Historical seeded stories keep their existing four scenes.
+
+Workflow launches at most two narration steps, then two image steps per iteration. Each paid request has its own durable step and bounded retry; completed assets are reused and ambiguous paid outcomes require review. Narration WAV responses stream directly to authenticated Cloudinary upload streams. Image API Base64 JSON requires a bounded per-image decode before upload; no local media files are written. Final assembly measures actual PCM samples. Gemini boundaries remain estimates; GET /api/v1/creations/:id exposes measured boundaries and formatted MM:SS.mmm timestamps when complete.
+
+CreationJob persists totalScenes, processedScenes and independent notificationStatus. The status response includes completionPercentage (up to 95% during media preparation; 100% only after final assembly). COMPLETED means a private draft is ready for review, never automatic publication. Completion email uses real Gmail SMTP; POST /api/v1/creations/:id/notify retries a failed email without regenerating media. Interrupted SENDING notifications require operator reconciliation.
+
+OPENAI_API_KEY is server-only. Unset or blank OPENAI_STT_MODEL, OPENAI_TTS_MODEL and OPENAI_TTS_VOICE default to whisper-1, tts-1-hd and onyx. The existing configurable GPT image model remains selected; no automatic legacy DALL·E substitution occurs. Run db:migrate:turso for the reviewed dynamic-scene migration from the previous production schema, or db:migrate for local SQLite. Cloud verification compares logical column/index definitions, ignoring physical column ordinals after ALTER TABLE.
+
+The Gemini provider returns the complete polished narrative as ordered scene narrations. The server assembles polishedText exactly from those narrations, avoiding divergent duplicate story text. The original transcript remains separately preserved.

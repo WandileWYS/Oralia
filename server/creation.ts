@@ -8,7 +8,7 @@ import { downloadUrl, inspectAsset, removeAsset, uploadParameters } from './prov
 import type { Prisma } from './generated/prisma/client.ts';
 
 async function budget(tx:Prisma.TransactionClient,userId:string){
-  const active=await tx.creationJob.count({where:{userId,status:{in:['QUEUED','RUNNING']}}});
+  const active=await tx.creationJob.count({where:{userId,status:{in:['QUEUED','SCRIPT_READY','PROCESSING_MEDIA']}}});
   const today=await tx.creationJob.count({where:{userId,createdAt:{gte:new Date(Date.now()-86400000)}}});
   if(active>=2||today>=10)throw new ServiceError('GENERATION_LIMIT',429,'Your creation limit has been reached. Try again later.');
 }
@@ -50,18 +50,18 @@ export async function jobData(userId:string,id:string) {
   const assets=await db.mediaAsset.findMany({where:{jobId:job.id,status:'READY'}});
   const plan=job.planJson?polishedPlanSchema.parse(JSON.parse(job.planJson)):null;
   const audio=assets.find(asset=>asset.slot==='NARRATION');
-  return {id:job.id,storyId:job.storyId,version:job.version,status:job.status,stage:job.stage,errorCode:job.errorCode,retryable:job.retryable,transcript:job.transcript,plan,versionId:version?.id??null,audioUrl:audio?downloadUrl(audio.publicId,audio.format!,'video'):null,preview:plan?plan.scenes.flatMap((scene,i)=>{const image=assets.find(asset=>asset.slot===`IMAGE_${i}`);return image?[{sceneNumber:i+1,imageUrl:downloadUrl(image.publicId,image.format!,'image'),narration:scene.narration}]:[]}):[]};
+  return {id:job.id,storyId:job.storyId,version:job.version,status:job.status,stage:job.stage,totalScenes:job.totalScenes,processedScenes:job.processedScenes,completionPercentage:job.status==='COMPLETED'?100:job.totalScenes?Math.floor(job.processedScenes/job.totalScenes*95):0,notificationStatus:job.notificationStatus,errorCode:job.errorCode,retryable:job.retryable,transcript:job.transcript,plan,versionId:version?.id??null,audioUrl:audio?downloadUrl(audio.publicId,audio.format!,'video'):null,boundaries:version?JSON.parse(version.snapshotJson).scenes.map((scene:{startTime:number;endTime:number})=>({...scene,startTimestamp:timestamp(scene.startTime),endTimestamp:timestamp(scene.endTime)})):[],preview:plan?plan.scenes.flatMap((scene,i)=>{const image=assets.find(asset=>asset.slot===`IMAGE_${i}`);return image?[{sceneNumber:i+1,imageUrl:downloadUrl(image.publicId,image.format!,'image'),narration:scene.narration}]:[]}):[]};
 }
 export async function reviseJob(userId:string,id:string,plan:PolishedPlan,requestKey:string) {
   const previous=await ownedJob(userId,id);
-  if(!['REVIEW_READY','FAILED','INDETERMINATE'].includes(previous.status))throw new ServiceError('JOB_BUSY',409,'Wait for the current creation to finish.');
+  if(!['COMPLETED','FAILED','INDETERMINATE'].includes(previous.status))throw new ServiceError('JOB_BUSY',409,'Wait for the current creation to finish.');
   requireCreationConfiguration();
   const parsed=polishedPlanSchema.parse(plan);
   return db.$transaction(async tx=>{
     const exists=await tx.creationJob.findUnique({where:{userId_requestKey:{userId,requestKey}}});if(exists)return exists;
     await budget(tx,userId);
     const latest=await tx.creationJob.findFirst({where:{storyId:previous.storyId,userId},orderBy:{version:'desc'}});
-    return tx.creationJob.create({data:{userId,storyId:previous.storyId,version:(latest?.version??0)+1,requestKey,inputJson:previous.inputJson,transcript:previous.transcript,planJson:JSON.stringify(parsed)}});
+    return tx.creationJob.create({data:{userId,storyId:previous.storyId,version:(latest?.version??0)+1,requestKey,inputJson:previous.inputJson,transcript:previous.transcript,planJson:JSON.stringify(parsed),totalScenes:parsed.scenes.length}});
   });
 }
 export async function retryJob(userId:string,id:string) {
@@ -72,3 +72,5 @@ export async function retryJob(userId:string,id:string) {
   return previous;
 }
 export function parseInput(value:string):CreationInput{return inputSchema.parse(JSON.parse(value));}
+
+function timestamp(seconds:number){const minutes=Math.floor(seconds/60);return String(minutes).padStart(2,'0')+':'+(seconds-minutes*60).toFixed(3).padStart(6,'0');}

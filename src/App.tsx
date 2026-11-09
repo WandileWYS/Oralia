@@ -18,7 +18,7 @@ import type { AppMode } from './types/mode';
 import type { CollectionFilter } from './types/story';
 
 export default function App() {
-  const [mode, setMode] = useState<AppMode>(() => new URLSearchParams(location.search).has('export') ? 'creator_studio' : 'vellum');
+  const [mode, setMode] = useState<AppMode>(() => new URLSearchParams(location.search).has('export') || new URLSearchParams(location.search).has('creation') ? 'creator_studio' : 'vellum');
   const [collection, setCollectionFilter] = useState<CollectionFilter>('ALL');
   const { session, save: setSession, signOut, notice: sessionNotice } = usePersistentSession();
   const catalog = useDatabaseCatalog();

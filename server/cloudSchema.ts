@@ -16,9 +16,9 @@ async function fingerprint(client: Client, tables: string[]) {
     for (const index of indexes.sort((a, b) => String(a.name).localeCompare(String(b.name)))) {
       const name = String(index.name);
       if (!/^[A-Za-z_0-9]+$/.test(name)) throw new Error('Unexpected index identifier.');
-      indexDefinitions.push({ name, unique: index.unique, columns: (await client.execute(`PRAGMA index_info("${name}")`)).rows });
+      indexDefinitions.push({ name, unique: index.unique, columns: (await client.execute(`PRAGMA index_info("${name}")`)).rows.map(({cid: _ordinal,...column})=>column) });
     }
-    schema.push({ table, columns, foreignKeys, indexes: indexDefinitions });
+    schema.push({ table, columns:columns.map(({cid: _ordinal,...column})=>column).sort((a,b)=>String(a.name).localeCompare(String(b.name))), foreignKeys, indexes: indexDefinitions });
   }
   return JSON.stringify(schema);
 }

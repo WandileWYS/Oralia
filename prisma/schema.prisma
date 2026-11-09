@@ -133,6 +133,9 @@ model CreationJob {
   stage          String   @default("queued")
   errorCode      String?
   retryable      Boolean  @default(false)
+  totalScenes    Int      @default(0)
+  processedScenes Int     @default(0)
+  notificationStatus String @default("PENDING")
   workflowRunId  String?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt

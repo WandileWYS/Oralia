@@ -8,7 +8,7 @@ import { deployCloudSchema, schemaFingerprint, schemaTables } from '../server/cl
 const config=resolveDatabaseConfig({...process.env,DATABASE_URL:undefined});
 if(!config.url.startsWith('libsql://'))throw new Error('Cloud credentials are required.');
 const cloud=createClient(config);const baseline=createClient({url:'file::memory:'});
-const id='20261107000000_production_pipeline';
+const id='20261109000000_dynamic_scenes';
 const sql=await readFile(`prisma/migrations/${id}/migration.sql`,'utf8');
 const checksum=createHash('sha256').update(sql.replace(/\r\n/g,'\n')).digest('hex');
 const expected=execFileSync(process.execPath,['node_modules/prisma/build/index.js','migrate','diff','--from-empty','--to-schema','prisma/schema.prisma','--script'],{encoding:'utf8',stdio:['ignore','pipe','inherit']});
@@ -17,14 +17,14 @@ try{
   const tables=await schemaTables(cloud);
   if(tables.includes('_oralia_migrations')){
     const existing=(await cloud.execute({sql:'SELECT checksum FROM _oralia_migrations WHERE id=?',args:[id]})).rows[0];
-    if(existing){if(existing.checksum!==checksum)throw new Error('Migration checksum changed.');await deployCloudSchema(cloud,expected);console.log('Production migration already applied and verified.');process.exitCode=0;}
+    if(existing){if(existing.checksum!==checksum)throw new Error('Migration checksum changed.');await deployCloudSchema(cloud,expected);console.log('Dynamic-scene migration already applied and verified.');process.exitCode=0;}
     else await apply();
   }else await apply();
-}catch{console.error('Production migration stopped. Verify the baseline schema and connection; no reset is attempted.');process.exitCode=1;}
+}catch{console.error('Dynamic-scene migration stopped. Verify the baseline schema and connection; no reset is attempted.');process.exitCode=1;}
 finally{cloud.close();baseline.close();}
 
 async function apply(){
-  for(const name of ['20261105000000_init','20261106000000_thematic_collections'])await baseline.executeMultiple(await readFile(`prisma/migrations/${name}/migration.sql`,'utf8'));
+  for(const name of ['20261105000000_init','20261106000000_thematic_collections','20261107000000_production_pipeline'])await baseline.executeMultiple(await readFile(`prisma/migrations/${name}/migration.sql`,'utf8'));
   const baselineTables=await schemaTables(baseline);
   if(await schemaFingerprint(cloud,baselineTables)!==await schemaFingerprint(baseline,baselineTables))throw new Error('Unexpected cloud schema.');
   const tx=await cloud.transaction('read');const backup:Record<string,unknown>={};

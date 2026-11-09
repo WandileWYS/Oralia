@@ -20,7 +20,7 @@ export function readWavePcm(wave:Buffer) {
   throw new ServiceError('AUDIO_INVALID',502,'Narration must be 24kHz mono 16-bit PCM.');
 }
 export function assembleNarration(segments: readonly Buffer[]) {
-  if(segments.length!==4||segments.some(segment=>!segment.length||segment.length%2))throw new ServiceError('AUDIO_INVALID',502,'Four PCM scenes are required.');
+  if(!segments.length||segments.length>64||segments.some(segment=>!segment.length||segment.length%2))throw new ServiceError('AUDIO_INVALID',502,'Between one and 64 PCM scenes are required.');
   let samples=0;
   const boundaries=segments.map(segment=>{const startTime=samples/sampleRate;samples+=segment.length/2;return {startTime,endTime:samples/sampleRate,sampleCount:segment.length/2};});
   return {bytes:pcmToWave(Buffer.concat(segments)),boundaries,duration:samples/sampleRate};

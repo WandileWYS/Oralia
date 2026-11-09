@@ -28,6 +28,7 @@ export const api={
   job:(id:string)=>request(`/creations/${encodeURIComponent(id)}`,jobSchema),
   create:(input:CreationInput,requestKey:string)=>request('/creations',jobSchema,post({input,requestKey})),
   revise:(id:string,plan:PolishedPlan,requestKey:string)=>request(`/creations/${encodeURIComponent(id)}`,jobSchema,{method:'PATCH',body:JSON.stringify({plan,requestKey})}),
+  notifyCreation:(id:string)=>request(`/creations/${encodeURIComponent(id)}/notify`,okSchema,post({})),
   retry:(id:string)=>request(`/creations/${encodeURIComponent(id)}/retry`,jobSchema,post({})),
   publish:(versionId:string)=>request(`/versions/${encodeURIComponent(versionId)}/publish`,okSchema,post({reviewed:true})),
   createExport:(versionId:string)=>request('/exports',exportSchema,post({versionId})),

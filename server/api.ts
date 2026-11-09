@@ -21,11 +21,12 @@ function send(response:ServerResponse,status:number,value:unknown) {
 }
 async function body(request:IncomingMessage):Promise<unknown> {
   const parsed:unknown=(request as IncomingMessage&{body?:unknown}).body;
-  let text='';const maxBytes=128*1024;
+  let text='';const maxBytes=1024*1024;
   if(parsed!==undefined)text=typeof parsed==='string'?parsed:Buffer.isBuffer(parsed)?parsed.toString():JSON.stringify(parsed);
   else {
     const chunks:Buffer[]=[];let length=0;
-    for await(const chunk of request){const bytes=Buffer.isBuffer(chunk)?chunk:Buffer.from(chunk as Uint8Array);length+=bytes.length;if(length>maxBytes)throw new ServiceError('REQUEST_TOO_LARGE',413,'Request is too large.');chunks.push(bytes);}
+    for await(const chunk of request){const bytes=Buffer.isBuffer(chunk)?chunk:Buffer.from(chunk as Uint8Array);length+=bytes.length;if(length<=maxBytes)chunks.push(bytes);}
+    if(length>maxBytes)throw new ServiceError('REQUEST_TOO_LARGE',413,'Request is too large.');
     // Decode once: a transport chunk can end in the middle of a UTF-8 character.
     text=Buffer.concat(chunks).toString('utf8');
   }
@@ -82,6 +83,8 @@ export async function handleApi(request:IncomingMessage,response:ServerResponse)
       const session=await auth.authorize(request);const {input,requestKey}=z.object({input:z.unknown(),requestKey:z.string().uuid()}).strict().parse(await body(request));const job=await createJob(session.userId,input,requestKey);
       if(job.status==='QUEUED'&&!job.workflowRunId)await launchCreation(job.id);return send(response,202,await jobData(session.userId,job.id));
     }
+    const completionMatch=route.match(/^\/creations\/([^/]+)\/notify$/);
+    if(method==='POST'&&completionMatch){const session=await auth.authorize(request);const job=await ownedJob(session.userId,completionMatch[1]);if(job.status!=='COMPLETED')throw new ServiceError('NOT_READY',409,'Complete generation first.');if(job.notificationStatus==='FAILED')await workflowRuntime.notifyCreation(job.id);return send(response,202,{ok:true});}
     const creationMatch=route.match(/^\/creations\/([^/]+)(?:\/(retry))?$/);
     if(creationMatch){
       const session=await auth.authorize(request);const id=creationMatch[1];
@@ -92,7 +95,7 @@ export async function handleApi(request:IncomingMessage,response:ServerResponse)
     const publishMatch=route.match(/^\/versions\/([^/]+)\/publish$/);
     if(method==='POST'&&publishMatch){
       const session=await auth.authorize(request);const version=await ownedVersion(publishMatch[1],session.userId);const job=await ownedJob(session.userId,version.jobId);
-      if(job.status!=='REVIEW_READY')throw new ServiceError('NOT_READY',409,'Complete generation before publishing.');z.object({reviewed:z.literal(true)}).strict().parse(await body(request));await db.creationJob.update({where:{id:job.id},data:{stage:'publishing'}});
+      if(job.status!=='COMPLETED')throw new ServiceError('NOT_READY',409,'Complete generation before publishing.');z.object({reviewed:z.literal(true)}).strict().parse(await body(request));await db.creationJob.update({where:{id:job.id},data:{stage:'publishing'}});
       try{await workflowRuntime.publish(version.id,session.userId);}catch{await db.creationJob.update({where:{id:job.id},data:{stage:'publish failed',errorCode:'PUBLISH_START_FAILED'}});throw new ServiceError('WORKFLOW_START_FAILED',503,'Publication could not start.');}return send(response,202,{ok:true});
     }
     if(method==='POST'&&route==='/exports'){
