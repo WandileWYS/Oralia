@@ -1,3 +1,5 @@
+import { foundryExportData } from './foundry/service.ts';
+import { narrationLanguageSchema } from '../src/types/language.ts';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { z } from 'zod';
 import { db } from './db.ts';
@@ -51,7 +53,7 @@ export async function handleApi(request:IncomingMessage,response:ServerResponse)
     const route=url.pathname.slice('/api/v1'.length);
     if(method!=='GET'&&request.headers.origin&&request.headers.origin!==appOrigin())throw new ServiceError('ORIGIN_REJECTED',403,'Use this application’s origin.');
     if(method==='GET'&&route==='/health'){await db.story.count();return send(response,200,{ok:true});}
-    if(method==='GET'&&route==='/catalog'){const value=url.searchParams.get('collection');return send(response,200,await readCatalog(value===null?undefined:storyCollectionSchema.parse(value)));}
+    if(method==='GET'&&route==='/catalog'){const value=url.searchParams.get('collection');return send(response,200,await readCatalog(value===null?undefined:storyCollectionSchema.parse(value),url.searchParams.has('language')?narrationLanguageSchema.parse(url.searchParams.get('language')):undefined));}
     if(method==='GET'&&(/^\/stories\/[^/]+$/.test(route)||/^\/creators\/[^/]+$/.test(route))){
       const catalog=await readCatalog();const key=decodeURIComponent(route.split('/')[2]);const value=route.startsWith('/stories/')?catalog.stories.find(story=>story.id===key):catalog.creators.find(creator=>creator.username===key);
       if(!value)throw new ServiceError('NOT_FOUND',404,'This story or creator was not found.');return send(response,200,value);
@@ -104,7 +106,7 @@ export async function handleApi(request:IncomingMessage,response:ServerResponse)
     if(exportMatch){
       const session=await auth.authorize(request);const legacy=await db.storyExport.findFirst({where:{id:exportMatch[1],userId:session.userId,NOT:{versionId:{startsWith:'foundry:'}}}});if(!legacy)throw new ServiceError('NOT_FOUND',404,'Export not found.');const record=await exportData(session.userId,exportMatch[1]);
       if(method==='GET'&&!exportMatch[2])return send(response,200,record);
-      if(method==='GET'&&exportMatch[2]==='download'){if(!record.downloadUrl)throw new ServiceError('EXPORT_NOT_READY',409,'The archive is not ready.');response.writeHead(302,{Location:record.downloadUrl,'Cache-Control':'no-store'});response.end();return;}
+      if(method==='GET'&&exportMatch[2]==='download'){if(record.status==='READY'&&!record.downloadUrl){const foundry=await foundryExportData(session.userId,record.id);if(foundry.parts.length>1)return send(response,409,{error:'Download individual ZIP parts in Studio Foundry.',code:'MULTIPART_REQUIRED',parts:foundry.parts});}if(!record.downloadUrl)throw new ServiceError('EXPORT_NOT_READY',409,'The archive is not ready.');response.writeHead(302,{Location:record.downloadUrl,'Cache-Control':'no-store'});response.end();return;}
       if(method==='POST'&&exportMatch[2]==='notify'){
         if(record.status!=='READY')throw new ServiceError('EXPORT_NOT_READY',409,'Complete the archive first.');
         await launchExport(record.id,true);

@@ -1,3 +1,4 @@
+import type { LanguageFilter } from './types/language';
 import { useEffect, useState } from 'react';
 import { AudioLines, Heart } from 'lucide-react';
 import { Navbar } from './components/Navbar';
@@ -23,6 +24,8 @@ export default function App() {
   const [collection, setCollectionFilter] = useState<CollectionFilter>('ALL');
   const { session, save: setSession, signOut, notice: sessionNotice } = usePersistentSession();
   const catalog = useDatabaseCatalog();
+  const [language,setLanguage]=useState<LanguageFilter>('ALL');
+  const discovery=useDatabaseCatalog({...collection==='ALL'?{}:{collection},...language==='ALL'?{}:{language}},catalog.data);
   const stories = catalog.data?.stories ?? [];
   const creators = catalog.data?.creators ?? [];
   const [authOpen, setAuthOpen] = useState(false);
@@ -52,7 +55,7 @@ export default function App() {
       {!catalog.data && <section className="collection-empty empty-state" role="status"><h1>{catalog.error ? 'Collection unavailable' : 'Opening the story collection…'}</h1><p>{catalog.error || 'Loading stories and profiles from the local database.'}</p>{catalog.error && <button className="secondary-button" onClick={catalog.retry}>Retry database connection</button>}</section>}
       {catalog.data && catalog.error && <div className="catalog-refresh-notice" role="alert"><p>The latest collection could not load. {catalog.error}</p><button type="button" className="secondary-button" onClick={catalog.retry}>Retry collection refresh</button></div>}
       {catalog.isRefreshing && <p className="helper-text catalog-refreshing" role="status">Refreshing the collection…</p>}
-      {catalog.data && visibleMode === 'vellum' && <VellumFeed stories={stories} creators={creators} collection={collection} onCollectionChange={setCollectionFilter} onCreate={() => selectMode('creator_studio')} />}
+      {catalog.data && visibleMode === 'vellum' && <VellumFeed stories={discovery.pending||discovery.error?[]:discovery.data?.stories||[]} creators={creators} language={language} onLanguageChange={setLanguage} pending={discovery.pending} error={discovery.error} onRetry={discovery.retry} collection={collection} onCollectionChange={setCollectionFilter} onCreate={() => selectMode('creator_studio')} />}
       {visibleMode === 'creator_studio' && (session ? <CreatorStudio collection={collection === 'ALL' ? 'FOLK_AND_FABLE' : collection} session={session} onPublished={catalog.retry} /> : <CreatorAccessGate onSignIn={() => setAuthOpen(true)} />)}
       {visibleMode==='studio_foundry'&&(session?<StudioFoundry session={session} collection={collection==='ALL'?'FOLK_AND_FABLE':collection}/>:<CreatorAccessGate onSignIn={()=>setAuthOpen(true)}/>)}
       {catalog.data && visibleMode === 'education' && <EducationFeed creators={creators} collection={collection} onCollectionChange={setCollectionFilter} stories={stories} />}

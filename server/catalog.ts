@@ -4,8 +4,8 @@ import { creatorProfileSchema } from '../src/types/creator.ts';
 import { collectionStyles } from '../src/data/presentation.ts';
 import { resolveStorySourceUrl } from '../src/lib/sourceLinks.ts';
 
-export async function readCatalog(collection?: import('../src/types/story.ts').StoryCollection) {
-  const rows = await db.story.findMany({ where: collection ? { collection } : undefined, include: { author: true, scenes: { orderBy: { sceneNumber: 'asc' } } }, orderBy: { publishedAt: 'desc' } });
+export async function readCatalog(collection?: import('../src/types/story.ts').StoryCollection, language?: string) {
+  const rows = await db.story.findMany({ where: { ...(collection ? { collection } : {}), ...(language ? { language } : {}) }, include: { author: true, scenes: { orderBy: { sceneNumber: 'asc' } } }, orderBy: { publishedAt: 'desc' } });
   const stories = rows.map(row => {
     const storyCollection = storyCollectionSchema.parse(row.collection);
     const generated = row.provenance === 'CREATOR_GENERATED';

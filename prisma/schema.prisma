@@ -64,6 +64,8 @@ model Story {
   scenes           KeyframeScene[]
   bookmarks        Bookmark[]
 
+  @@index([language, publishedAt])
+  @@index([language, collection, publishedAt])
   @@index([collection, publishedAt])
   @@index([authorId])
 }
@@ -180,7 +182,22 @@ model StoryVersion {
   @@unique([storyId, number])
 }
 
+model ExportPart {
+  id String @id @default(cuid())
+  exportId String
+  export StoryExport @relation(fields: [exportId], references: [id], onDelete: Cascade)
+  partNumber Int
+  filename String
+  publicId String @unique
+  entriesJson String
+  bytes Int?
+  checksum String?
+  status String @default("PLANNED")
+  @@unique([exportId, partNumber])
+}
+
 model StoryExport {
+  parts ExportPart[]
   id             String @id @default(cuid())
   userId         String
   user           User @relation(fields: [userId], references: [id], onDelete: Cascade)

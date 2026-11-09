@@ -15,7 +15,7 @@ import { toNodeHandler } from 'srvx/node';
 test('production API: secure emailed codes, cookies, ownership and persisted creation jobs',async t=>{
   await mkdir('.qa',{recursive:true});const file=`.qa/production-api-${randomUUID()}.db`;const url=`file:./${file}`;
   const sqlite=createClient({url});
-  for(const migration of ['20261105000000_init','20261106000000_thematic_collections','20261107000000_production_pipeline','20261109000000_dynamic_scenes'])await sqlite.executeMultiple(await readFile(`prisma/migrations/${migration}/migration.sql`,'utf8'));
+  for(const migration of ['20261105000000_init','20261106000000_thematic_collections','20261107000000_production_pipeline','20261109000000_dynamic_scenes','20261109120000_localized_multipart'])await sqlite.executeMultiple(await readFile(`prisma/migrations/${migration}/migration.sql`,'utf8'));
   sqlite.close();
   Object.assign(process.env,{DATABASE_URL:url,AUTH_SECRET:'production-test-only-secret-32-characters-long',APP_ORIGIN:'http://127.0.0.1',SMTP_HOST:'smtp.example.test',SMTP_PORT:'587',SMTP_USER:'sender@example.test',SMTP_PASSWORD:'test-only',OPENAI_API_KEY:'test-only',GEMINI_API_KEY:'test-only',CLOUDINARY_CLOUD_NAME:'test-only',CLOUDINARY_API_KEY:'test-only',CLOUDINARY_API_SECRET:'test-only'});
   delete process.env.VERCEL;
@@ -39,6 +39,8 @@ test('production API: secure emailed codes, cookies, ownership and persisted cre
     await t.test('catalog preserves eight attributed stories and all collection filters',async()=>{
       const catalog=catalogSchema.parse(await(await call('/catalog')).json());assert.equal(catalog.stories.length,8);assert.equal(catalog.stories.flatMap(story=>story.presentation.keyframes).length,32);
       assert.equal(catalogSchema.parse(await(await call('/catalog?collection=FOLK_AND_FABLE')).json()).stories.length,6);assert.equal(catalogSchema.parse(await(await call('/catalog?collection=EPIC_AND_CHRONICLE')).json()).stories.length,2);assert.equal((await call('/catalog?collection=ALL')).status,400);
+      assert.equal((await call('/catalog?language=ALL')).status,400);assert.equal((await call('/catalog?language=xx')).status,400);
+      await db.story.update({where:{id:'anansi-wisdom'},data:{language:'zu'}});const localized=catalogSchema.parse(await(await call('/catalog?language=zu&collection=FOLK_AND_FABLE')).json());assert.deepEqual(localized.stories.map(s=>s.id),['anansi-wisdom']);assert.equal(catalogSchema.parse(await(await call('/catalog?language=sw')).json()).stories.length,0);assert.equal(catalogSchema.parse(await(await call('/catalog?language=en')).json()).stories.length,7);await db.story.update({where:{id:'anansi-wisdom'},data:{language:'en'}});
       assert.equal((await call('/stories/anansi-wisdom')).status,200);assert.equal((await call('/creators/akan_stories')).status,200);assert.equal((await call('/unknown')).status,404);
     });
     await t.test('codes are random, hashed, expire, reject wrong values and cannot be replayed',async()=>{

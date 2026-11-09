@@ -34,7 +34,7 @@ export function createAuthService(database: PrismaClient, deliver: typeof sendEm
         if (recent) throw new ServiceError('RESEND_COOLDOWN', 429, 'Wait sixty seconds before requesting another code.');
         await tx.otpChallenge.updateMany({ where: { email, used:false }, data: { used:true } });
         return tx.otpChallenge.create({ data: { email, codeHash:keyed(email+':'+pin), expiresAt:new Date(Date.now()+600000) } });
-      });
+      }, {maxWait:10000,timeout:20000});
       try {
         await deliver(email, 'Your Oralia verification code', `Your Oralia verification code is ${pin}.\n\nIt expires in ten minutes. Do not share this code. If you did not request it, ignore this email.`);
         await database.otpChallenge.update({ where: { id:challenge.id }, data: { sentAt:new Date() } });
@@ -61,7 +61,7 @@ export function createAuthService(database: PrismaClient, deliver: typeof sendEm
         const token=randomBytes(32).toString('hex');const expiresAt=new Date(Date.now()+7*86400000);
         await tx.session.create({data:{id:digest(token),userId:user.id,expiresAt,verified:true}});
         return {user,token,expiresAt};
-      });
+      }, {maxWait:10000,timeout:20000});
       if(!result)throw new ServiceError('CODE_INVALID',400,'The code is incorrect, expired, or already used.');
       return result;
     },

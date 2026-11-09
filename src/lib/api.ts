@@ -16,7 +16,7 @@ export async function request<T>(path:string,schema:z.ZodType<T>,options:Request
 const post=(value:unknown)=>({method:'POST',body:JSON.stringify(value)});
 const uploadSchema=z.object({assetId:z.string(),apiKey:z.string(),signature:z.string(),uploadUrl:z.string().url(),parameters:z.object({public_id:z.string(),timestamp:z.number(),type:z.literal('authenticated'),overwrite:z.literal(false),allowed_formats:z.string()})});
 export const api={
-  catalog:(signal?:AbortSignal)=>request('/catalog',catalogSchema,{signal}),
+  catalog:(signal?:AbortSignal,filters?:{collection?:string;language?:string})=>request('/catalog'+(filters?'?'+new URLSearchParams(filters).toString():''),catalogSchema,{signal}),
   requestPin:(email:string)=>request('/auth/otp/request',challengeSchema,post({email})),
   verifyPin:(challengeId:string,pin:string)=>request('/auth/otp/verify',creatorSessionSchema,post({challengeId,pin})),
   session:()=>request('/auth/session',creatorSessionSchema),

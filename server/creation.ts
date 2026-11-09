@@ -1,3 +1,4 @@
+import { narrationLanguageSchema } from '../src/types/language.ts';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { db } from './db.ts';
@@ -32,7 +33,7 @@ export async function completeUpload(userId: string,id:string) {
   return db.mediaAsset.update({where:{id},data:{assetId:metadata.asset_id,bytes:metadata.bytes,duration:metadata.duration,format:metadata.format,status:'READY'}});
 }
 export async function createJob(userId:string,raw:unknown,requestKey:string) {
-  const input=inputSchema.parse(raw);
+  const input=inputSchema.parse(raw);narrationLanguageSchema.parse(input.language);
   const existing=await db.creationJob.findUnique({where:{userId_requestKey:{userId,requestKey}}});
   if(existing){if(existing.inputJson!==JSON.stringify(input))throw new ServiceError('IDEMPOTENCY_CONFLICT',409,'This submission key belongs to another story input.');return existing;}
   requireCreationConfiguration();
@@ -48,7 +49,7 @@ export async function jobData(userId:string,id:string) {
   const job=await ownedJob(userId,id);
   const version=await db.storyVersion.findUnique({where:{jobId:job.id}});
   const assets=await db.mediaAsset.findMany({where:{jobId:job.id,status:'READY'}});
-  const plan=job.planJson?polishedPlanSchema.parse(JSON.parse(job.planJson)):null;
+  const original=parseInput(job.inputJson);const plan=job.planJson?polishedPlanSchema.parse({...JSON.parse(job.planJson),polishedTitle:JSON.parse(job.planJson).polishedTitle||original.title||'Untitled story',language:JSON.parse(job.planJson).language||original.language}):null;
   const audio=assets.find(asset=>asset.slot==='NARRATION');
   return {id:job.id,storyId:job.storyId,version:job.version,status:job.status,stage:job.stage,totalScenes:job.totalScenes,processedScenes:job.processedScenes,completionPercentage:job.status==='COMPLETED'?100:job.totalScenes?Math.floor(job.processedScenes/job.totalScenes*95):0,notificationStatus:job.notificationStatus,errorCode:job.errorCode,retryable:job.retryable,transcript:job.transcript,plan,versionId:version?.id??null,audioUrl:audio?downloadUrl(audio.publicId,audio.format!,'video'):null,boundaries:version?JSON.parse(version.snapshotJson).scenes.map((scene:{startTime:number;endTime:number})=>({...scene,startTimestamp:timestamp(scene.startTime),endTimestamp:timestamp(scene.endTime)})):[],preview:plan?plan.scenes.flatMap((scene,i)=>{const image=assets.find(asset=>asset.slot===`IMAGE_${i}`);return image?[{sceneNumber:i+1,imageUrl:downloadUrl(image.publicId,image.format!,'image'),narration:scene.narration}]:[]}):[]};
 }
@@ -56,7 +57,7 @@ export async function reviseJob(userId:string,id:string,plan:PolishedPlan,reques
   const previous=await ownedJob(userId,id);
   if(!['COMPLETED','FAILED','INDETERMINATE'].includes(previous.status))throw new ServiceError('JOB_BUSY',409,'Wait for the current creation to finish.');
   requireCreationConfiguration();
-  const parsed=polishedPlanSchema.parse(plan);
+  const original=parseInput(previous.inputJson);const parsed=polishedPlanSchema.parse({...plan,polishedTitle:plan.polishedTitle||original.title||'Untitled story',language:plan.language||original.language});if(parsed.language!==original.language)throw new ServiceError('LANGUAGE_MISMATCH',400,'Regeneration must retain the selected narration language.');
   return db.$transaction(async tx=>{
     const exists=await tx.creationJob.findUnique({where:{userId_requestKey:{userId,requestKey}}});if(exists)return exists;
     await budget(tx,userId);

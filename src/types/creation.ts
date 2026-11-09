@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { regionTagSchema, storyCollectionSchema } from './story.ts';
 
 export const inputSchema = z.object({
-  title: z.string().trim().min(1).max(100), collection: storyCollectionSchema, region: regionTagSchema,
+  title: z.string().trim().max(100).default(''), collection: storyCollectionSchema, region: regionTagSchema,
   text: z.string().trim().max(12000).optional(), sourceAssetId: z.string().optional(),
   provenance: z.string().trim().min(1).max(1000), language: z.string().min(2).max(30).default('en'),
 }).strict().refine(value => Boolean(value.text) !== Boolean(value.sourceAssetId), 'Provide either text or a recording.');
@@ -11,6 +11,7 @@ export const scenePlanSchema = z.object({
   imagePrompt: z.string().trim().min(1).max(2000), proposedStartSeconds: z.number().finite().nonnegative(), proposedEndSeconds:z.number().finite().positive().optional(),
 }).strict();
 export const polishedPlanSchema = z.object({
+  polishedTitle: z.string().trim().min(1).max(100).optional(), language: z.string().min(2).max(30).optional(),
   polishedText: z.string().trim().min(1).max(12000), scenes: z.array(scenePlanSchema).min(1).max(64),
 }).strict().superRefine((value, context) => {
   if (value.scenes.map(scene=>scene.narration).join('\n\n').replace(/\s+/g,' ').trim() !== value.polishedText.replace(/\s+/g,' ').trim()) context.addIssue({code:'custom',message:'Scene narration must equal the polished story.'});
