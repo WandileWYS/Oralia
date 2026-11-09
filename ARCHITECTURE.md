@@ -2,7 +2,7 @@
 
 ## System and runtime
 
-Oralia has three client modes: `vellum`, `creator_studio`, and `education`. Public discovery and listening require no login. Creation uses real verified email and an owner-authorized persisted workflow.
+Oralia has four client modes: `vellum`, `creator_studio`, `studio_foundry`, and `education`. Public discovery and listening require no login. Creation uses real verified email and an owner-authorized persisted workflow.
 
 The React/TypeScript/Tailwind client is built by Vite. Nitro supplies local Node development and Vercel Node.js 24 serverless packaging. `routes/api/v1/[...route].ts` bridges the Fetch entry to the Node HTTP `server/api.ts` handler; Workflow's Vite plugin compiles `workflows/story.ts` into durable functions. Keep API, static assets, and Workflow's `/.well-known/workflow/v1/*` routes distinct from the SPA renderer. The old Vite middleware/hand-written Vercel catch-all entrypoint is superseded. Use Nitro’s Fetch-format entry on Node.js 24 with the srvx Node-handler bridge: the installed Nitro raw-Node entry mutates a socket property and fails on reused HTTP connections. The Fetch entry avoids this mutation while preserving body/header/cookie semantics.
 
@@ -18,7 +18,9 @@ App
   CreatorAccessGate / CreatorSignInModal
   CreatorStudio
     useStudioRecording / AudioDraftPlayer
-    persisted job status, scene editor, review, export status
+    persisted job status, scene editor, review, Publish to Vellum
+  StudioFoundry — script, image references/instructions, TTS choice
+    private job progress, scene previews, ZIP downloads, archive/email recovery
   EducationFeed — collection presentation + independent region tabs
   ListeningRoomModal
     CarouselPlayer — useAudioCarousel / usePlaybackSource
@@ -94,7 +96,7 @@ Illustrative request/response examples below are documentation, never runtime fa
 }
 ```
 
-Use either `text` or a verified owned `sourceAssetId`, never both. Creator Studio's production selection is concrete and defaults to Folk & Fable when browsing All Collections. Export manifest version is `oralia-storyboard-v4`, with immutable `versionId`, concrete `collection`, narration filename/duration/checksum, ordered scene prompts, proposed and measured boundaries, image filenames/checksums, and provenance.
+Use either `text` or a verified owned `sourceAssetId`, never both. Creator Studio's production selection is concrete and defaults to Folk & Fable when browsing All Collections. Historical export manifest version is `oralia-storyboard-v4`, with immutable `versionId`, concrete `collection`, narration filename/duration/checksum, ordered scene prompts, proposed and measured boundaries, image filenames/checksums, and provenance.
 
 ### Education browsing
 
@@ -175,7 +177,7 @@ All routes are under `/api/v1`. Successful protected operations require the veri
 | GET/PATCH `/creations/:id` | Owner status / immutable scene revision (202) |
 | POST `/creations/:id/retry` | Confirmed retryable failure only (202) |
 | POST `/versions/:id/publish` | `{ "reviewed": true }`; queue promotion (202) |
-| POST `/exports` | Owned version archive request (202) |
+| POST `/exports` | Retired: authenticated 410 FOUNDRY_REQUIRED |
 | GET `/exports/:id` | Archive and notification status |
 | GET `/exports/:id/download` | Owner authorization, then expiring media redirect |
 | POST `/exports/:id/notify` | Retry failed notification without regeneration (202) |
@@ -184,7 +186,7 @@ The former standalone placeholder-image endpoint is removed. Generation occurs o
 
 ## Export/email separation
 
-Workflow packages an owned immutable snapshot into ZIP, stores it privately, marks READY, then notifies. Manifest checksums describe actual downloaded bytes. A stable `/?export=:id` link opens Creator Studio and requires the owner before redirecting to a fresh signed archive URL. Email status is separate (`QUEUED`, `SENDING`, `SENT`, `FAILED`); failure leaves READY intact. Concurrent send claims prevent parallel duplicates; SMTP cannot guarantee exactly-once delivery. Investigate a stranded SENDING state before another send.
+Foundry Workflow packages a completed Foundry plan or recovers an existing owned immutable export snapshot into ZIP, stores it privately, marks READY, then notifies. New arbitrary story-version exports are retired. Manifest checksums describe actual downloaded bytes. A stable `/?export=:id` link opens Studio Foundry and requires the owner before redirecting to a fresh signed archive URL. Email status is separate (`QUEUED`, `SENDING`, `SENT`, `FAILED`); failure leaves READY intact. Concurrent send claims prevent parallel duplicates; SMTP cannot guarantee exactly-once delivery. Investigate a stranded SENDING state before another send.
 
 ## Delivery and verification roadmap
 
@@ -206,3 +208,27 @@ CreationJob persists totalScenes, processedScenes and independent notificationSt
 OPENAI_API_KEY is server-only. Unset or blank OPENAI_STT_MODEL, OPENAI_TTS_MODEL and OPENAI_TTS_VOICE default to whisper-1, tts-1-hd and onyx. The existing configurable GPT image model remains selected; no automatic legacy DALL·E substitution occurs. Run db:migrate:turso for the reviewed dynamic-scene migration from the previous production schema, or db:migrate for local SQLite. Cloud verification compares logical column/index definitions, ignoring physical column ordinals after ALTER TABLE.
 
 The Gemini provider returns the complete polished narrative as ordered scene narrations. The server assembles polishedText exactly from those narrations, avoiding divergent duplicate story text. The original transcript remains separately preserved.
+
+## Studio Foundry — isolated production workspace
+
+Studio Foundry is a fourth, verified-creator mode. Creator Studio retains recording, generation, revision, review and Publish to Vellum; export controls and export-link handling live only in Foundry. Core generation/provider/publication modules, Prisma models and migrations are unchanged.
+
+Foundry reuses generic CreationJob records with storyId prefixed foundry: and a studio_foundry_v1 input discriminator. StoryExport source identifiers use foundry:<jobId>; MediaAsset slots and private Cloudinary paths are Foundry-specific. Core creation list/detail/retry/revision routes reject these records before invoking core services. Foundry never creates Story, KeyframeScene or StoryVersion rows. Historical export sources are read-only; recovery never regenerates their media.
+
+New projects accept 12,000-character scripts, 1–64 scenes, and up to four JPEG/PNG/WebP references of 3 MiB each, with required per-image instructions of at most 2,000 characters. Source wording is preserved. Gemini receives image bytes and matching notes, selects reference IDs, and supplies estimated continuous timing. OpenAI receives selected references through image edits, or uses text-to-image when none apply. Output is high-quality 1536×1024 PNG.
+
+AI narration is on by default. Bypass AI TTS prevents all voice requests and omits narration from the archive; its timing guide is explicitly estimated for studio recording. With TTS, narration streams privately to Cloudinary and sample-measured boundaries replace estimates. Paid work runs in individual durable steps, at most two operations concurrently. Unknown paid completion is never blindly retried.
+
+Foundry progresses QUEUED → SCRIPT_READY → PROCESSING_MEDIA → COMPLETED. COMPLETED requires a stored, verified archive. Notification status is independent; SMTP failure leaves downloads available and supports email-only retry. No placeholder media, fake email or runtime simulation is permitted.
+
+All new endpoints are under /api/v1/foundry:
+- POST /references; POST /references/:id/complete: signed private upload and metadata verification.
+- POST /jobs; GET /jobs; GET /jobs/:id; POST /jobs/:id/retry: owner-scoped submissions, progress, previews and safe retries.
+- GET /exports; GET /exports/:id; GET /exports/:id/download: owned current/legacy packages and fresh expiring download redirects.
+- POST /exports/:id/retry; POST /exports/:id/notify: archive-only recovery or failed-email retry.
+
+POST /api/v1/exports now returns authenticated 410 FOUNDRY_REQUIRED. Previously emailed legacy download URLs remain authorized and compatible. Old ?export= links and new ?foundryExport= / ?foundryJob= links open Foundry and retain that destination through real email sign-in.
+
+The streamed ZIP uses oralia-foundry-assets-v1: generated PNGs unchanged, script, JSON/text timeline, selected-reference IDs/notes, provenance, optional WAV and media checksums. Text/WAV entries use DEFLATE; original reference files are excluded. ZIP download integrity is verified before readiness. Failed uploads retain generated assets for packaging-only recovery; errors distinguish configuration, capacity, source reads, upload, verification and email.
+
+Cloudinary's current account raw-file allowance is checked before submission and enforced on the output stream. The implementation supports larger allowances without a code change; at least 256 MiB is recommended for larger jobs. Do not split packages, downsample generated art or change storage providers to bypass a quota. Isolated tests may mock capacity; real checks must stay below the actual account limit until it is raised. Never claim an earlier failed export has been repaired before successfully storing and downloading that archive.

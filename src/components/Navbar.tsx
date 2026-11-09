@@ -21,6 +21,7 @@ interface NavbarProps {
 const modes = [
   { id: 'vellum', label: 'Vellum', icon: Compass },
   { id: 'creator_studio', label: 'Creator Studio', icon: Layers3 },
+  { id: 'studio_foundry', label: 'Studio Foundry', icon: Layers3 },
   { id: 'education', label: 'Education', icon: BookOpen },
 ] as const;
 

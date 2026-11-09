@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { AudioLines, Heart } from 'lucide-react';
 import { Navbar } from './components/Navbar';
+import { StudioFoundry } from './components/StudioFoundry';
 import { CreatorStudio } from './components/CreatorStudio';
 import { EducationFeed } from './components/EducationFeed';
 import { VellumFeed } from './components/VellumFeed';
@@ -18,7 +19,7 @@ import type { AppMode } from './types/mode';
 import type { CollectionFilter } from './types/story';
 
 export default function App() {
-  const [mode, setMode] = useState<AppMode>(() => new URLSearchParams(location.search).has('export') || new URLSearchParams(location.search).has('creation') ? 'creator_studio' : 'vellum');
+  const [mode, setMode] = useState<AppMode>(() => ['export','foundryExport','foundryJob'].some(key=>new URLSearchParams(location.search).has(key)) ? 'studio_foundry' : new URLSearchParams(location.search).has('creation') ? 'creator_studio' : 'vellum');
   const [collection, setCollectionFilter] = useState<CollectionFilter>('ALL');
   const { session, save: setSession, signOut, notice: sessionNotice } = usePersistentSession();
   const catalog = useDatabaseCatalog();
@@ -34,9 +35,9 @@ export default function App() {
     document.documentElement.dataset.theme = theme;
     try { localStorage.setItem('oralia-editorial-theme', theme); } catch { /* Appearance remains usable without storage. */ }
   }, [theme]);
-  const selectMode = (next: AppMode) => { publicView.close(); setMode(next); setAuthOpen(next === 'creator_studio' && !session); };
+  const selectMode = (next: AppMode) => { publicView.close(); setMode(next); setAuthOpen((next === 'creator_studio'||next==='studio_foundry') && !session); };
   const returnToVellum = () => { setAuthOpen(false); publicView.close(); setMode('vellum'); };
-  const visibleMode = publicView.view && mode === 'creator_studio' ? 'vellum' : mode;
+  const visibleMode = publicView.view && (mode === 'creator_studio'||mode==='studio_foundry') ? 'vellum' : mode;
   const returnFromReader = () => { setAuthOpen(false); if (mode === 'education') publicView.close(); else returnToVellum(); };
   const requestedStory = publicView.view?.kind === 'story' ? stories.find(story => story.id === publicView.view?.key) : undefined;
   const entry = requestedStory ? getPlayableStories([requestedStory])[0] : undefined;
@@ -53,12 +54,13 @@ export default function App() {
       {catalog.isRefreshing && <p className="helper-text catalog-refreshing" role="status">Refreshing the collection…</p>}
       {catalog.data && visibleMode === 'vellum' && <VellumFeed stories={stories} creators={creators} collection={collection} onCollectionChange={setCollectionFilter} onCreate={() => selectMode('creator_studio')} />}
       {visibleMode === 'creator_studio' && (session ? <CreatorStudio collection={collection === 'ALL' ? 'FOLK_AND_FABLE' : collection} session={session} onPublished={catalog.retry} /> : <CreatorAccessGate onSignIn={() => setAuthOpen(true)} />)}
+      {visibleMode==='studio_foundry'&&(session?<StudioFoundry session={session} collection={collection==='ALL'?'FOLK_AND_FABLE':collection}/>:<CreatorAccessGate onSignIn={()=>setAuthOpen(true)}/>)}
       {catalog.data && visibleMode === 'education' && <EducationFeed creators={creators} collection={collection} onCollectionChange={setCollectionFilter} stories={stories} />}
     </main>
     <footer className="site-footer"><span><AudioLines size={16} />oralia. <span>Every voice carries a world.</span></span><span>Built with care <Heart size={11} /> Andela × OpenAI Codex Accelerator</span></footer>
     {publicCatalogPending && publicView.view && <CatalogStatusModal resource={publicView.view.kind} pending={catalog.pending} error={catalog.error} onRetry={catalog.retry} onClose={returnToVellum} />}
     {catalog.data && !publicCatalogPending && publicView.view?.kind === 'story' && (entry ? <ListeningRoomModal key={entry.story.id} story={entry.story} presentation={entry.presentation} creator={creators.find(creator => creator.id === entry.story.creatorId)} returnLabel={mode === 'education' ? 'Back to Education' : 'Back to Vellum feed'} onClose={returnFromReader} /> : <UnavailablePublicViewModal  onClose={returnToVellum} />)}
     {catalog.data && !publicCatalogPending && publicView.view?.kind === 'creator' && (profile ? <CreatorProfileModal key={profile.id} creator={profile} stories={stories} collection={collection} onCollectionChange={setCollectionFilter} onClose={returnToVellum} /> : <UnavailablePublicViewModal  onClose={returnToVellum} />)}
-    {authOpen && !publicView.view && <CreatorSignInModal onClose={() => setAuthOpen(false)} onSignIn={next => { setSession(next); catalog.retry(); setAuthOpen(false); setMode('creator_studio'); }} />}
+    {authOpen && !publicView.view && <CreatorSignInModal onClose={() => setAuthOpen(false)} onSignIn={next => { setSession(next); catalog.retry(); setAuthOpen(false); setMode(mode==='studio_foundry'?'studio_foundry':'creator_studio'); }} />}
   </div></CreatorSessionContext>;
 }

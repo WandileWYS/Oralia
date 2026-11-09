@@ -1,0 +1,33 @@
+import {db} from '../db.ts';
+import {randomUUID} from 'node:crypto';
+import {ServiceError} from '../errors.ts';
+import {required} from '../config.ts';
+import {mediaCloud,inspectAsset,downloadUrl,removeAsset} from '../providers/storage.ts';
+import {foundryInputSchema,foundryPlanSchema,type FoundryInput} from '../../src/types/foundry.ts';
+export const foundryPrefix='foundry:';
+export async function ownedFoundry(userId:string,id:string){const job=await db.creationJob.findFirst({where:{id,userId,storyId:{startsWith:foundryPrefix}}});if(!job)throw new ServiceError('NOT_FOUND',404,'Foundry project not found.');return job;}
+export async function archiveLimit(){try{const usage=await mediaCloud().api.usage();const limit=Number(usage.media_limits?.raw_max_size_bytes);if(!Number.isFinite(limit)||limit<=0)throw new Error();return limit;}catch{throw new ServiceError('ARCHIVE_CONFIGURATION',503,'Cloudinary archive capacity could not be verified.',true);}}
+export async function reserveReference(userId:string){
+  if(await db.mediaAsset.count({where:{userId,slot:'FOUNDRY_REFERENCE',createdAt:{gte:new Date(Date.now()-86400000)}}})>=40)throw new ServiceError('UPLOAD_LIMIT',429,'Your daily reference upload limit has been reached.');
+  const parameters={public_id:`oralia/foundry/references/${userId}/${randomUUID()}`,timestamp:Math.floor(Date.now()/1000),type:'authenticated',overwrite:false,allowed_formats:'jpg,jpeg,png,webp'};
+  const cloud=mediaCloud();const asset=await db.mediaAsset.create({data:{userId,slot:'FOUNDRY_REFERENCE',publicId:parameters.public_id,resourceType:'image'}});
+  return {assetId:asset.id,parameters,signature:cloud.utils.api_sign_request(parameters,required('CLOUDINARY_API_SECRET')),apiKey:required('CLOUDINARY_API_KEY'),uploadUrl:`https://api.cloudinary.com/v1_1/${required('CLOUDINARY_CLOUD_NAME')}/image/upload`};
+}
+export async function completeReference(userId:string,id:string){
+  const asset=await db.mediaAsset.findFirst({where:{id,userId,slot:'FOUNDRY_REFERENCE'}});if(!asset)throw new ServiceError('NOT_FOUND',404,'Reference not found.');
+  const {z}=await import('zod');const meta=z.object({asset_id:z.string(),public_id:z.string(),resource_type:z.string(),type:z.string(),format:z.string(),bytes:z.number(),width:z.number(),height:z.number()}).parse(await inspectAsset(asset.publicId,'image'));
+  if(meta.public_id!==asset.publicId||meta.resource_type!=='image'||meta.type!=='authenticated'||!['jpg','jpeg','png','webp'].includes(meta.format)||meta.bytes<=0||meta.bytes>3*1024*1024||meta.width*meta.height>25000000){await removeAsset(asset.publicId,'image');throw new ServiceError('REFERENCE_INVALID',400,'Choose JPEG, PNG or WebP up to 3 MiB and 25 megapixels.');}
+  return db.mediaAsset.update({where:{id},data:{status:'READY',assetId:meta.asset_id,format:meta.format,bytes:meta.bytes,mimeType:meta.format==='jpg'||meta.format==='jpeg'?'image/jpeg':`image/${meta.format}`}});
+}
+export async function submitFoundry(userId:string,raw:unknown,requestKey:string){
+  const input=foundryInputSchema.parse(raw);const serialized=JSON.stringify(input);
+  const existing=await db.creationJob.findUnique({where:{userId_requestKey:{userId,requestKey}}});if(existing){if(!existing.storyId.startsWith(foundryPrefix)||existing.inputJson!==serialized)throw new ServiceError('IDEMPOTENCY_CONFLICT',409,'Submission key belongs to another input.');return existing;}
+  for(const name of ['SMTP_HOST','SMTP_PORT','OPENAI_API_KEY','GEMINI_API_KEY','CLOUDINARY_CLOUD_NAME','CLOUDINARY_API_KEY','CLOUDINARY_API_SECRET','SMTP_USER','SMTP_PASSWORD'])required(name);
+  const limit=await archiveLimit();const estimate=Math.ceil(input.script.split(/\s+/).length/50)*3*1024*1024+(input.bypassTts?0:input.script.split(/\s+/).length/2.5*48000);
+  if(estimate>limit)throw new ServiceError('ARCHIVE_CAPACITY',409,'Estimated bundle exceeds Cloudinary raw-file capacity. Raise the allowance (256 MiB recommended) before generation.');
+  for(const reference of input.references)if(!await db.mediaAsset.findFirst({where:{id:reference.assetId,userId,slot:'FOUNDRY_REFERENCE',status:'READY'}}))throw new ServiceError('REFERENCE_INVALID',400,'Complete your owned reference uploads first.');
+  return db.$transaction(async tx=>{const active=await tx.creationJob.count({where:{userId,status:{in:['QUEUED','SCRIPT_READY','PROCESSING_MEDIA']}}});const today=await tx.creationJob.count({where:{userId,createdAt:{gte:new Date(Date.now()-86400000)}}});if(active>=2||today>=10)throw new ServiceError('GENERATION_LIMIT',429,'Your creation limit has been reached.');return tx.creationJob.create({data:{userId,storyId:foundryPrefix+randomUUID(),inputJson:serialized,requestKey}});});
+}
+export async function foundryExportData(userId:string,id:string){const record=await db.storyExport.findFirst({where:{id,userId}});if(!record)throw new ServiceError('NOT_FOUND',404,'Export not found.');return {id,status:record.status,notificationStatus:record.notificationStatus,errorCode:record.errorCode,legacy:!record.versionId.startsWith(foundryPrefix),downloadUrl:record.status==='READY'&&record.assetPublicId?`/api/v1/foundry/exports/${encodeURIComponent(id)}/download`:null};}
+export async function foundryData(userId:string,id:string){const job=await ownedFoundry(userId,id);const input=foundryInputSchema.parse(JSON.parse(job.inputJson));const assets=await db.mediaAsset.findMany({where:{jobId:id,status:'READY'}});const archive=await db.storyExport.findUnique({where:{userId_versionId:{userId,versionId:foundryPrefix+id}}});return {id,title:input.title,status:job.status,stage:job.stage,errorCode:job.errorCode,retryable:job.retryable,totalScenes:job.totalScenes,processedScenes:job.processedScenes,completionPercentage:job.status==='COMPLETED'?100:job.totalScenes?Math.floor(job.processedScenes/job.totalScenes*90):0,bypassTts:input.bypassTts,plan:job.planJson?foundryPlanSchema.parse(JSON.parse(job.planJson)):null,images:assets.filter(a=>a.slot.startsWith('FOUNDRY_IMAGE_')).map(a=>({sceneNumber:Number(a.slot.slice(14))+1,url:downloadUrl(a.publicId,'png','image')})).sort((a,b)=>a.sceneNumber-b.sceneNumber),archive:archive?await foundryExportData(userId,archive.id):null};}
+export async function referenceContext(input:FoundryInput,userId:string){const result=[];for(const ref of input.references){const asset=await db.mediaAsset.findFirst({where:{id:ref.assetId,userId,slot:'FOUNDRY_REFERENCE',status:'READY'}});if(!asset?.format)throw new ServiceError('REFERENCE_INVALID',400,'Reference is unavailable.');const {readMedia}=await import('../providers/storage.ts');const bytes=await readMedia(downloadUrl(asset.publicId,asset.format,'image'),3*1024*1024);result.push({...ref,bytes,mimeType:asset.mimeType||'image/png'});}return result;}

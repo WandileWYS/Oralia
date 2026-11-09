@@ -4,7 +4,7 @@
 
 - Use React, strict TypeScript, Tailwind CSS, Vite, npm, and the committed lockfile. Preserve warm editorial themes, pill controls, curved cards, and accessible custom dropdowns.
 - Keep provider SDKs, Prisma, Node built-ins, and secrets outside the `src` browser import graph. React calls the runtime-validated `src/lib/api.ts` client. Server domain modules live under `server`; provider adapters under `server/providers`.
-- Nitro exposes `routes/api/v1/[...route].ts` through a Fetch-to-Node bridge to the shared HTTP `handleApi`. Preserve `/api/v1` paths, JSON/status semantics, cookies, bounded parsing, and exact origin checks. Vercel Workflow handles durable creation, publication, and export steps from `workflows/story.ts`.
+- Nitro exposes `routes/api/v1/[...route].ts` through a Fetch-to-Node bridge to the shared HTTP `handleApi`. Preserve `/api/v1` paths, JSON/status semantics, cookies, bounded parsing, and exact origin checks. Vercel Workflow handles durable creation and publication in `workflows/story.ts`; isolated Foundry generation and archive/email recovery live in `workflows/foundry.ts`.
 - Use shared Zod contracts with `unknown` at untrusted boundaries. Do not replace provider failures with fabricated successful responses. Isolated test fixtures and provider mocks must never enter runtime fallback paths.
 
 ## Data and state ownership
@@ -29,7 +29,7 @@
 - Retry only confirmed transient failures, with bounded backoff. An ambiguous paid request must become INDETERMINATE, not automatically repeat. A new version must be an explicit creator action.
 - Source recordings, draft previews, and archives are authenticated Cloudinary assets. Only reviewed complete versions may publish. Generate public playback copies with immutable versioned IDs; never expose private source recordings in catalog responses.
 - Derive scene starts/ends from measured 24 kHz mono 16-bit PCM samples. Keep Gemini's proposed times separately. Editing narration/order/prompts creates a new immutable version and requires regenerated media before publishing.
-- Package exports on the server from owned persisted versions. Manifest is `oralia-storyboard-v4`, with collection, source context, prompts, measured boundaries, and checksums. Track archive and notification states independently. Retrying email must not repeat image/audio generation or rebuild a ready archive.
+- Package exports only in Foundry from owned persisted projects or existing immutable legacy export requests. New archives use `oralia-foundry-assets-v1`; historical downloaded manifests remain unchanged. Include collection, source context, reference mapping, prompts, timing provenance and checksums. Track archive and notification states independently. Retrying email must not repeat image/audio generation or rebuild a ready archive.
 - SMTP does not offer exactly-once delivery. Preserve notification claims; investigate interrupted SENDING records before retrying an uncertain send. Do not promise delivery based solely on SMTP acceptance.
 
 ## Playback, accessibility, and storage
@@ -60,3 +60,27 @@ Workflow launches at most two narration steps, then two image steps per iteratio
 CreationJob persists totalScenes, processedScenes and independent notificationStatus. The status response includes completionPercentage (up to 95% during media preparation; 100% only after final assembly). COMPLETED means a private draft is ready for review, never automatic publication. Completion email uses real Gmail SMTP; POST /api/v1/creations/:id/notify retries a failed email without regenerating media. Interrupted SENDING notifications require operator reconciliation.
 
 OPENAI_API_KEY is server-only. Unset or blank OPENAI_STT_MODEL, OPENAI_TTS_MODEL and OPENAI_TTS_VOICE default to whisper-1, tts-1-hd and onyx. The existing configurable GPT image model remains selected; no automatic legacy DALL·E substitution occurs. Run db:migrate:turso for the reviewed dynamic-scene migration from the previous production schema, or db:migrate for local SQLite. Cloud verification compares logical column/index definitions, ignoring physical column ordinals after ALTER TABLE.
+
+## Studio Foundry — isolated production workspace
+
+Studio Foundry is a fourth, verified-creator mode. Creator Studio retains recording, generation, revision, review and Publish to Vellum; export controls and export-link handling live only in Foundry. Core generation/provider/publication modules, Prisma models and migrations are unchanged.
+
+Foundry reuses generic CreationJob records with storyId prefixed foundry: and a studio_foundry_v1 input discriminator. StoryExport source identifiers use foundry:<jobId>; MediaAsset slots and private Cloudinary paths are Foundry-specific. Core creation list/detail/retry/revision routes reject these records before invoking core services. Foundry never creates Story, KeyframeScene or StoryVersion rows. Historical export sources are read-only; recovery never regenerates their media.
+
+New projects accept 12,000-character scripts, 1–64 scenes, and up to four JPEG/PNG/WebP references of 3 MiB each, with required per-image instructions of at most 2,000 characters. Source wording is preserved. Gemini receives image bytes and matching notes, selects reference IDs, and supplies estimated continuous timing. OpenAI receives selected references through image edits, or uses text-to-image when none apply. Output is high-quality 1536×1024 PNG.
+
+AI narration is on by default. Bypass AI TTS prevents all voice requests and omits narration from the archive; its timing guide is explicitly estimated for studio recording. With TTS, narration streams privately to Cloudinary and sample-measured boundaries replace estimates. Paid work runs in individual durable steps, at most two operations concurrently. Unknown paid completion is never blindly retried.
+
+Foundry progresses QUEUED → SCRIPT_READY → PROCESSING_MEDIA → COMPLETED. COMPLETED requires a stored, verified archive. Notification status is independent; SMTP failure leaves downloads available and supports email-only retry. No placeholder media, fake email or runtime simulation is permitted.
+
+All new endpoints are under /api/v1/foundry:
+- POST /references; POST /references/:id/complete: signed private upload and metadata verification.
+- POST /jobs; GET /jobs; GET /jobs/:id; POST /jobs/:id/retry: owner-scoped submissions, progress, previews and safe retries.
+- GET /exports; GET /exports/:id; GET /exports/:id/download: owned current/legacy packages and fresh expiring download redirects.
+- POST /exports/:id/retry; POST /exports/:id/notify: archive-only recovery or failed-email retry.
+
+POST /api/v1/exports now returns authenticated 410 FOUNDRY_REQUIRED. Previously emailed legacy download URLs remain authorized and compatible. Old ?export= links and new ?foundryExport= / ?foundryJob= links open Foundry and retain that destination through real email sign-in.
+
+The streamed ZIP uses oralia-foundry-assets-v1: generated PNGs unchanged, script, JSON/text timeline, selected-reference IDs/notes, provenance, optional WAV and media checksums. Text/WAV entries use DEFLATE; original reference files are excluded. ZIP download integrity is verified before readiness. Failed uploads retain generated assets for packaging-only recovery; errors distinguish configuration, capacity, source reads, upload, verification and email.
+
+Cloudinary's current account raw-file allowance is checked before submission and enforced on the output stream. The implementation supports larger allowances without a code change; at least 256 MiB is recommended for larger jobs. Do not split packages, downsample generated art or change storage providers to bypass a quota. Isolated tests may mock capacity; real checks must stay below the actual account limit until it is raised. Never claim an earlier failed export has been repaired before successfully storing and downloading that archive.

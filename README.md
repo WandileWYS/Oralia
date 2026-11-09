@@ -8,10 +8,11 @@ Oralia is an audio-first visual carousel platform: **Instagram for African Oral 
 
 African oral traditions deserve publishing tools that require less editing, rendering, and bandwidth. Oralia brings voice, imagery, and text together while retaining source attribution and cultural context.
 
-## Three Modes
+## Workspaces
 
 - **Vellum:** Public story discovery, creator profiles, literary collections, and an immersive Listening Room. No account is required to browse or listen.
-- **Creator & Game Studio:** Verified creators submit recordings or text, review AI-polished narration and illustrations, publish completed stories, and request server-generated asset packages by email.
+- **Creator & Game Studio:** Verified creators submit recordings or text, review AI-polished narration and illustrations, publish completed stories, and publish to Vellum.
+- **Studio Foundry:** Private script-to-asset production, per-image visual references and instructions, optional TTS bypass, and background ZIP/email delivery.
 - **Education & Schooling:** Thematically curated reading and listening with independent regional filters. **Folk & Fable** emphasizes wit, folklore, and reflection; **Epic & Chronicle** emphasizes origin narratives, journeys, and consequence. These labels do not certify classroom suitability.
 
 ## Technical Approach
@@ -65,7 +66,7 @@ Email codes expire after ten minutes, permit five attempts, and have a sixty-sec
 
 Creators may submit audio up to **five minutes / 20 MB**, or text up to **12,000 characters**, with source context and permission. Every generated story has **dynamically planned scenes (1–64)**. The Studio shows persisted progress, private previews, failures, safe retries, new immutable versions, and explicit publication review. Unconfirmed paid-provider results require review rather than automatic regeneration.
 
-Exports are generated from immutable database versions. The ZIP includes narration, all scene images, source transcript, polished text, and the `oralia-storyboard-v4` manifest with checksums. Email links require the owning account before minting a short-lived media download. Email failures do not rebuild completed archives. SMTP is at-least-once delivery; an interrupted send may require operator investigation.
+Studio Foundry generates private asset packages from persisted projects. The ZIP includes generated images, the script, timeline guides, optional narration, reference instructions and checksums using `oralia-foundry-assets-v1`. Earlier immutable version exports remain available for authorized download and recovery through Foundry. Email links require the owning account before minting a short-lived media download. Email failures do not rebuild completed archives. SMTP is at-least-once delivery; an interrupted send may require operator investigation.
 
 ## Database and Vercel Deployment
 
@@ -97,3 +98,27 @@ CreationJob persists totalScenes, processedScenes and independent notificationSt
 OPENAI_API_KEY is server-only. Unset or blank OPENAI_STT_MODEL, OPENAI_TTS_MODEL and OPENAI_TTS_VOICE default to whisper-1, tts-1-hd and onyx. The existing configurable GPT image model remains selected; no automatic legacy DALL·E substitution occurs. Run db:migrate:turso for the reviewed dynamic-scene migration from the previous production schema, or db:migrate for local SQLite. Cloud verification compares logical column/index definitions, ignoring physical column ordinals after ALTER TABLE.
 
 The Gemini provider returns the complete polished narrative as ordered scene narrations. The server assembles polishedText exactly from those narrations, avoiding divergent duplicate story text. The original transcript remains separately preserved.
+
+## Studio Foundry — isolated production workspace
+
+Studio Foundry is a fourth, verified-creator mode. Creator Studio retains recording, generation, revision, review and Publish to Vellum; export controls and export-link handling live only in Foundry. Core generation/provider/publication modules, Prisma models and migrations are unchanged.
+
+Foundry reuses generic CreationJob records with storyId prefixed foundry: and a studio_foundry_v1 input discriminator. StoryExport source identifiers use foundry:<jobId>; MediaAsset slots and private Cloudinary paths are Foundry-specific. Core creation list/detail/retry/revision routes reject these records before invoking core services. Foundry never creates Story, KeyframeScene or StoryVersion rows. Historical export sources are read-only; recovery never regenerates their media.
+
+New projects accept 12,000-character scripts, 1–64 scenes, and up to four JPEG/PNG/WebP references of 3 MiB each, with required per-image instructions of at most 2,000 characters. Source wording is preserved. Gemini receives image bytes and matching notes, selects reference IDs, and supplies estimated continuous timing. OpenAI receives selected references through image edits, or uses text-to-image when none apply. Output is high-quality 1536×1024 PNG.
+
+AI narration is on by default. Bypass AI TTS prevents all voice requests and omits narration from the archive; its timing guide is explicitly estimated for studio recording. With TTS, narration streams privately to Cloudinary and sample-measured boundaries replace estimates. Paid work runs in individual durable steps, at most two operations concurrently. Unknown paid completion is never blindly retried.
+
+Foundry progresses QUEUED → SCRIPT_READY → PROCESSING_MEDIA → COMPLETED. COMPLETED requires a stored, verified archive. Notification status is independent; SMTP failure leaves downloads available and supports email-only retry. No placeholder media, fake email or runtime simulation is permitted.
+
+All new endpoints are under /api/v1/foundry:
+- POST /references; POST /references/:id/complete: signed private upload and metadata verification.
+- POST /jobs; GET /jobs; GET /jobs/:id; POST /jobs/:id/retry: owner-scoped submissions, progress, previews and safe retries.
+- GET /exports; GET /exports/:id; GET /exports/:id/download: owned current/legacy packages and fresh expiring download redirects.
+- POST /exports/:id/retry; POST /exports/:id/notify: archive-only recovery or failed-email retry.
+
+POST /api/v1/exports now returns authenticated 410 FOUNDRY_REQUIRED. Previously emailed legacy download URLs remain authorized and compatible. Old ?export= links and new ?foundryExport= / ?foundryJob= links open Foundry and retain that destination through real email sign-in.
+
+The streamed ZIP uses oralia-foundry-assets-v1: generated PNGs unchanged, script, JSON/text timeline, selected-reference IDs/notes, provenance, optional WAV and media checksums. Text/WAV entries use DEFLATE; original reference files are excluded. ZIP download integrity is verified before readiness. Failed uploads retain generated assets for packaging-only recovery; errors distinguish configuration, capacity, source reads, upload, verification and email.
+
+Cloudinary's current account raw-file allowance is checked before submission and enforced on the output stream. The implementation supports larger allowances without a code change; at least 256 MiB is recommended for larger jobs. Do not split packages, downsample generated art or change storage providers to bypass a quota. Isolated tests may mock capacity; real checks must stay below the actual account limit until it is raised. Never claim an earlier failed export has been repaired before successfully storing and downloading that archive.

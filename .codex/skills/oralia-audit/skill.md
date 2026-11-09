@@ -13,7 +13,7 @@ Read AGENTS.md, package.json, schema.prisma, server/api.ts, and ARCHITECTURE.md 
 - Check All Collections, Folk & Fable, Epic & Chronicle, plus region intersections and direct links opened under another collection. The seed baseline is eight stories (6/2), 32 scenes, four editorial profiles; additional legitimate records are allowed.
 - Exercise modal close/back/Escape, focus restoration, audio cleanup, bookmarks, both themes and responsive layouts. Guests can browse and listen. Missing media shows retry/transcript access, never timing tones or replacement content.
 - Check real email-code UI, cookie-restored header identity, avatar failure, logout and Studio gating through isolated tests. Never accept arbitrary PINs or rely on localStorage bearer credentials.
-- Studio must show persisted creation jobs, explicit failures, private previews, immutable revisions, review-gated publication and independent export/email states. A provider failure must not produce fake media or success.
+- Creator Studio must show persisted creation jobs, explicit failures, private previews, immutable revisions and review-gated publication. Studio Foundry exclusively owns asset packaging and independent archive/email states. A provider failure must not produce fake media or success.
 
 ## Server and persistence
 
@@ -42,3 +42,7 @@ Workflow launches at most two narration steps, then two image steps per iteratio
 CreationJob persists totalScenes, processedScenes and independent notificationStatus. The status response includes completionPercentage (up to 95% during media preparation; 100% only after final assembly). COMPLETED means a private draft is ready for review, never automatic publication. Completion email uses real Gmail SMTP; POST /api/v1/creations/:id/notify retries a failed email without regenerating media. Interrupted SENDING notifications require operator reconciliation.
 
 OPENAI_API_KEY is server-only. Unset or blank OPENAI_STT_MODEL, OPENAI_TTS_MODEL and OPENAI_TTS_VOICE default to whisper-1, tts-1-hd and onyx. The existing configurable GPT image model remains selected; no automatic legacy DALL·E substitution occurs. Run db:migrate:turso for the reviewed dynamic-scene migration from the previous production schema, or db:migrate for local SQLite. Cloud verification compares logical column/index definitions, ignoring physical column ordinals after ALTER TABLE.
+
+## Foundry isolation checks
+
+Verify Foundry navigation/sign-in return, four private image references with individual notes, TTS on and bypassed, estimated versus measured timelines, owner-scoped polling, automatic ZIP/email delivery and independent retry controls. Confirm Creator Studio has Publish to Vellum and no export controls. Confirm Foundry IDs never enter core generation or publishing routes, and schema/migration/core engine files remain unchanged. Existing failed exports can only repackage immutable media. Test capacity failures without changing the real account limit; never claim recovery until a full authorized ZIP download passes integrity checks. Use isolated fixtures for failure tests and real providers for explicitly authorized live checks.
