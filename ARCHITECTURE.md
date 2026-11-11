@@ -1,246 +1,162 @@
 # Oralia Architecture
 
+Repository contracts reviewed **11 November 2026**. Product/setup overview: [README.md](README.md). Evidence and expansion priorities: [RESEARCH.md](RESEARCH.md). Contribution workflow: [AGENTS.md](AGENTS.md).
+
 ## System and runtime
 
-Oralia has four client modes: `vellum`, `creator_studio`, `studio_foundry`, and `education`. Public discovery and listening require no login. Creation uses real verified email and an owner-authorized persisted workflow.
+React/TypeScript/Tailwind is built by Vite. Nitro provides local Node development and Vercel Node.js 24 functions; the Workflow Vite plugin compiles durable jobs. The Fetch-to-Node adapter preserves `/api/v1` paths, JSON status/body semantics, cookies, and origin checks. Vite is configured for port 5173; hosted functions have a 300-second limit, while work is divided into durable steps.
 
-The React/TypeScript/Tailwind client is built by Vite. Nitro supplies local Node development and Vercel Node.js 24 serverless packaging. `routes/api/v1/[...route].ts` bridges the Fetch entry to the Node HTTP `server/api.ts` handler; Workflow's Vite plugin compiles `workflows/story.ts` into durable functions. Keep API, static assets, and Workflow's `/.well-known/workflow/v1/*` routes distinct from the SPA renderer. The old Vite middleware/hand-written Vercel catch-all entrypoint is superseded. Use Nitro’s Fetch-format entry on Node.js 24 with the srvx Node-handler bridge: the installed Nitro raw-Node entry mutates a socket property and fails on reused HTTP connections. The Fetch entry avoids this mutation while preserving body/header/cookie semantics.
-
-Prisma 7 uses the libSQL driver adapter. Turso is the hosted source of truth; explicit file SQLite URLs are for local/isolated work. Cloudinary stores actual media, while Turso and Workflow state hold references and progress. Gmail STARTTLS/Nodemailer, Gemini, and OpenAI remain server-only provider adapters.
+Prisma 7 uses the libSQL adapter and generated server-only client. Turso holds structured records; Cloudinary holds media bytes. Gmail SMTP/Nodemailer, Gemini, and OpenAI adapters are server-only. Keep API, static assets, and `/.well-known/workflow/v1/*` endpoints distinct from frontend rendering. The Vercel entry uses Fetch format plus the srvx Node bridge; do not restore obsolete SPA catch-all rewrites or the old raw-Node entry.
 
 ## Component hierarchy and state
 
 ```text
-App
-  Navbar — mode, collection, theme, session avatar
-  VellumFeed — Featured Vellum / Trending Voices / Recent Chronicles
-    StoryCard / CreatorByline
-  CreatorAccessGate / CreatorSignInModal
-  CreatorStudio
-    useStudioRecording / AudioDraftPlayer
-    persisted job status, scene editor, review, Publish to Vellum
-  StudioFoundry — script, image references/instructions, TTS choice
-    private job progress, scene previews, ZIP downloads, archive/email recovery
-  EducationFeed — collection presentation + independent region tabs
-  ListeningRoomModal
-    CarouselPlayer — useAudioCarousel / usePlaybackSource
-      KeyframeTimeline / PlaybackWaveform / CaptionTranscript / VolumeControl
-      SceneThumbnail / bookmark controls
-  CreatorProfileModal / CatalogStatusModal / UnavailablePublicViewModal
+App → Navbar; VellumFeed; CreatorStudio; StudioFoundry; EducationFeed
+VellumFeed → StoryCard / CreatorByline → public story/profile selection
+ListeningRoomModal → CarouselPlayer → timeline, captions, volume, scenes
+CreatorAccessGate / CreatorSignInModal → verified cookie session
 ```
 
-| Owner | State |
+| Owner | Responsibility |
 |---|---|
-| App | `AppMode`, shared `CollectionFilter`, theme, sign-in visibility |
-| `usePublicView` | URL-based public story/profile selection and browser history |
-| `useDatabaseCatalog` | Whole public catalog, loading/error/refresh/retry |
-| `usePersistentSession` | Cookie-restored verified identity and logout feedback; no browser bearer token |
-| `useStoryBookmark` | Guest device IDs or authenticated account bookmarks |
-| HTML audio element | Actual time, playback, duration, rate, buffering, volume |
-| `useAudioCarousel` | Derived active scene and event-driven controls; one paint loop for frame boundaries |
-| Studio | Unsaved source/scene edits, selected persisted job, review checkbox, polling |
-| Turso | Identity, hashes, sessions, story/version/job/asset/export metadata |
-| Cloudinary | Private source/draft/archive bytes and public published-media copies |
-| Workflow | Durable ordered execution with IDs, not media buffers |
+| App | Workspace, collection, Vellum language filter, theme, sign-in visibility |
+| `useDatabaseCatalog` | Full public catalog plus separate keyed/cancellable discovery requests; loading, refresh, errors |
+| `usePublicView` | Public story/profile URLs and history; direct links work independently of browsing filters |
+| `usePersistentSession` | Server-cookie identity restoration and logout; no JavaScript bearer-token storage |
+| `useStoryBookmark` | Device-local guest IDs or authenticated account bookmarks; no media download |
+| HTML audio / `useAudioCarousel` | One audio clock; derived scene index, playback controls, buffering, volume, and paint-aligned updates |
+| Creator/Foundry components | Unsaved form edits, selected persisted job, polling, previews; Creator Studio also owns review confirmation |
+| Turso / Cloudinary | Durable ownership, jobs, versions and asset metadata / actual asset bytes |
 
-The UI never substitutes a catalog fixture when fetch fails. Direct story/profile links resolve against the full catalog even when a browsing collection differs. Creator profile filtering uses the same collection state.
+Phone styling is isolated to `@media (max-width: 480px)`: full-screen native Listening Room dialog, compact header, stacked forms, and single-column discovery. Existing rules above 480px remain unchanged. Preserve modal focus restoration, scroll locking, safe-area padding, and accessible popovers.
 
 ## Shared contracts
 
-`StoryCollection` is exactly `FOLK_AND_FABLE | EPIC_AND_CHRONICLE`. `CollectionFilter` additionally allows UI-only `ALL`. Region/tradition is independent. One `Story.presentation` contains approved style metadata and keyframes; collection is literary character, not an audience rating.
-
-`CreationInput`, `PolishedPlan`, `CreationJob`, and export responses are validated by `src/types/creation.ts`. Untrusted provider JSON must match all variable scene records; joined scene narration must equal the polished text, within 12,000 characters. Proposed times start at zero and increase, but are not authoritative playback boundaries.
-
-Illustrative request/response examples below are documentation, never runtime fallback data.
-
-### Vellum public story
-
-```json
-{
-  "mode": "vellum",
-  "filter": "ALL",
-  "story": {
-    "id": "anansi-wisdom",
-    "collection": "FOLK_AND_FABLE",
-    "creatorId": "editorial-akan",
-    "region": "west-africa",
-    "audio": { "url": "/audio/anansi-wisdom.wav", "durationSeconds": 72.5, "mimeType": "audio/wav", "language": "en" },
-    "presentation": {
-      "stylePreset": "FOLK_AND_FABLE",
-      "styleLabel": "Warm illustrated folklore",
-      "reviewStatus": "approved",
-      "keyframes": [
-        { "id": "s1", "startTime": 0, "endTime": 18, "caption": "Anansi sets out to gather wisdom.", "imageUrl": "https://images.unsplash.com/photo-1516026672322-bc52d61a55d5?w=1920" },
-        { "id": "s2", "startTime": 18, "endTime": 37, "caption": "He places what he learns inside a pot.", "imageUrl": "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?w=1920" },
-        { "id": "s3", "startTime": 37, "endTime": 55, "caption": "A child sees a simpler way.", "imageUrl": "https://images.unsplash.com/photo-1472396961693-142e6e269027?w=1920" },
-        { "id": "s4", "startTime": 55, "endTime": 72.5, "caption": "Wisdom belongs among the people.", "imageUrl": "https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?w=1920" }
-      ]
-    }
-  }
-}
-```
+Zod contracts in [src/types](src/types) validate requests, provider output, and API responses. Literary keys are `FOLK_AND_FABLE` and `EPIC_AND_CHRONICLE`; `ALL` is browsing-only. Region/tradition is independent. Target languages are `en`, `zu`, `xh`, `sw`, `yo`, `ha`, `af`, `fr`, `pt`; default UI selection is `en`. Historical snapshot readers accept earlier plan shapes, while new provider output requires refined title and matching target language.
 
 ### Creator job submission
 
+`CreationInput` accepts exactly one of text or an owned verified source asset, optional/blank title, concrete collection, region, language, and permission/source context. Example request to `POST /api/v1/creations`:
+
 ```json
 {
-  "requestKey": "c916975a-a585-48a1-87c9-04f187474d06",
+  "requestKey": "64ad4200-a053-4d39-833d-4389a69b47e5",
   "input": {
-    "title": "The River Remembers",
-    "collection": "EPIC_AND_CHRONICLE",
+    "title": "",
+    "text": "A traveler learns to listen beside a river.",
+    "collection": "FOLK_AND_FABLE",
     "region": "originals",
     "language": "en",
-    "text": "A traveler returns to the river where her family once gathered.",
-    "provenance": "Original narrative submitted with the author's permission."
+    "provenance": "Original narrative submitted with permission."
   }
 }
 ```
 
-Use either `text` or a verified owned `sourceAssetId`, never both. Creator Studio's production selection is concrete and defaults to Folk & Fable when browsing All Collections. Historical export manifest version is `oralia-storyboard-v4`, with immutable `versionId`, concrete `collection`, narration filename/duration/checksum, ordered scene prompts, proposed and measured boundaries, image filenames/checksums, and provenance.
+### Structured planning
 
-### Education browsing
+New Creator Studio Gemini wire responses contain `polishedTitle`, `language`, and scenes with title, narration, image prompt, and proposed boundaries. The server assembles `polishedText` from ordered narration. Example provider response:
 
 ```json
 {
-  "mode": "education",
-  "collectionFilter": "FOLK_AND_FABLE",
-  "regionFilter": "east-africa",
-  "collectionChoices": ["ALL", "FOLK_AND_FABLE", "EPIC_AND_CHRONICLE"],
-  "presentation": {
-    "FOLK_AND_FABLE": "Warm illustrated folklore, wit, and reflection",
-    "EPIC_AND_CHRONICLE": "Cinematic editorial journeys, origin narratives, and consequence"
-  },
-  "captions": { "enabled": true, "language": "en", "dialectOverlay": false }
+  "polishedTitle": "The River That Taught Listening",
+  "language": "en",
+  "scenes": [{
+    "title": "Beside the river",
+    "narration": "A traveler learns to listen beside a river.",
+    "imagePrompt": "A traveler beside an African river, warm illustrated fable, consistent character design.",
+    "proposedStartSeconds": 0,
+    "proposedEndSeconds": 20
+  }]
 }
 ```
 
-Do not invent translated captions or make collection-based school-suitability claims. Captions reflect actual narration and available source-language metadata.
+Foundry uses separate input/plan contracts: discriminator `studio_foundry_v1`, script, language, collection, provenance, `bypassTts` (default false), and owned reference IDs/instructions. Its Gemini scenes contain narration, `imagePrompt`, selected `referenceIds`, `startSeconds`, and `endSeconds`; the server assembles `localizedScript`. Timing is `estimated` until sample-measured narration replaces it with `audio_measured`.
+
+### Limits and models
+
+| Boundary | Implemented limit/default |
+|---|---|
+| Source recording | Five minutes; 20 MiB |
+| Typed/localized text | 12,000 characters; 1–64 scenes; narration up to 2,000 characters per scene |
+| Foundry references | Four JPEG/PNG/WebP images; 3 MiB and 25 megapixels each; required instructions up to 2,000 characters each |
+| Admission | Two active jobs and ten submissions per user per rolling 24 hours, across both workspaces |
+| Paid media concurrency | At most two operations within a workflow, not a global cap |
+| AI defaults | STT `whisper-1`; Gemini `gemini-3.5-flash-lite`; TTS `tts-1-hd` / `onyx`; image `gpt-image-2.5-sunburst` |
+| Images | Creator: 1024×1024 medium-quality PNG; Foundry: 1536×1024 high-quality PNG, edits when selected references apply |
+| Archive parts | At most 9 MiB and never above the account's advertised raw-file allowance |
+
+Environment overrides apply to OpenAI STT/TTS/voice/image settings. Defaults do not prove provider-account access or native-language quality. Source wording is preserved in the submission, while processed narration is localized; reviewed dialect translations are not fabricated.
 
 ## Database and safe cutover
 
-| Model | Responsibility |
+There is **one shared Prisma schema**, with application-level owner authorization rather than separate tenant schemas or database-enforced row policies. `User` owns sessions, jobs, versions, assets, exports, and bookmarks; public stories reference authors. `Story` stores the published refined title, language, collection, media location, provenance, and publication time; ordered `KeyframeScene` rows drive playback.
+
+`CreationJob` stores immutable input, transcription/plan, workflow identity, progress, and failure state. `StoryVersion` stores the immutable review/publication snapshot. `MediaAsset` tracks owned upload/generation slots. `StoryExport` separates archive readiness from notification state; related `ExportPart` rows hold ordered filenames, planned entries, private public IDs, bytes, SHA-256, and readiness.
+
+Foundry jobs use `storyId=foundry:<uuid>` and `studio_foundry_v1`; exports use `versionId=foundry:<jobId>`. Core creation handlers exclude/reject those jobs. Foundry creates no `Story`, `KeyframeScene`, or `StoryVersion` rows; legacy recovery reads existing snapshots without modifying them.
+
+Indexes cover language/publication, language/collection/publication, collection/publication, and author. Catalog filtering is applied in Prisma before reading scenes, but returns the full matching set without cursors/pages. Current individual public story/profile handlers still derive results from a catalog read; direct lookup optimization is future work.
+
+Hosted runtime requires both Turso variables, with precedence over `DATABASE_URL`, and never silently falls back to SQLite. Outside Vercel, an explicit `file:` URL selects local SQLite. Local Prisma CLI schema commands operate on SQLite; remote Turso changes use explicit authenticated SQL and checksums.
+
+| Command | Intended use |
 |---|---|
-| User | Unique email/username, public identity, role, verified-email timestamp |
-| OtpChallenge | Keyed code hash, expiry, attempts, delivery timestamp, consumed state |
-| AuthRateLimit | Persistent keyed email/IP counters and reset times |
-| Session | Hashed opaque credential, owner, expiry, verified flag |
-| Story | Published catalog projection, author, concrete collection, source context, audio/duration, version reference |
-| KeyframeScene | Unique story/scene number, narration, image, measured start timestamp |
-| Bookmark | Unique owner/story relationship |
-| CreationJob | Owner/request idempotency, logical story/version, input/transcript/plan, stage/status, workflow run |
-| MediaAsset | Owner/job slot, Cloudinary identity/type/format, checksum/sample count, processing status |
-| StoryVersion | Immutable snapshot, owner/job, logical story/version number, publication time |
-| StoryExport | Unique owner/version archive, recipient, independent notification and archive status |
+| `npm run db:generate` | Generate the ignored Prisma client |
+| `npm run db:migrate` | Deploy committed migrations to explicitly configured local SQLite |
+| `npm run db:deploy:turso` | Initialize an empty cloud schema or verify a matching one; refuse incompatible schema |
+| `npm run db:migrate:turso` | Apply/verify the current reviewed localized/multipart upgrade from its expected baseline, with an ignored backup |
+| `npm run db:seed` | Explicit idempotent editorial seeding; preserve unrelated user content |
+| `npm run db:verify:turso` | Read-only cloud catalog/seed integrity verification |
 
-Drafts do not become public Story rows until publication. Source and draft assets require Cloudinary authenticated delivery; owner-checked API responses mint ten-minute signed downloads. Publication uses immutable public version paths and transactional catalog updates. Existing sourced stories retain `LEGACY_EDITORIAL` provenance and accurate photographic attribution.
-
-The production migration adds columns/tables without rebuilding/deleting stories or scenes. It invalidates old simulated sessions/challenges; real owners must verify again. Cloud application checks the pre-production baseline, writes a local ignored backup, applies an atomic batch, and records migration/schema checksums. A repeated command verifies the same result. Unexpected schemas stop without reset. Test writes always use separate SQLite files.
+Do not use remote `db push`, reset data, edit historical migrations, or treat the current upgrade script as a universal migration orchestrator. Earlier baselines need a reviewed upgrade path. Native Windows migration-CLI errors require diagnosis; successful SQL-based tests do not establish that the CLI works on every host.
 
 ## Authentication
 
-1. Validate and normalize email; reserve editorial addresses.
-2. Persist rate counters and a random six-digit code hash. Ten-minute expiry, five attempts, sixty-second resend cooldown; hourly request caps per email/IP and verification IP cap.
-3. Send through Gmail port 587 with required STARTTLS. Failed SMTP invalidates the challenge and never authenticates.
-4. Constant-time hash verification and atomic consumption create/update verified identity plus a seven-day opaque session.
-5. Return identity and HttpOnly/SameSite=Lax cookie, Secure in production. No token enters JavaScript storage. Cookie authorization verifies expiry and email ownership; logout revokes the database session.
+Real SMTP delivers random six-digit verification codes; only keyed hashes are stored. Codes expire in ten minutes, allow five attempts, and have sixty-second resend cooldown plus persistent email/IP limits. Failed attempts commit counters. SMTP failure invalidates the challenge without issuing a session.
+
+Verified sessions are opaque database-backed credentials in HttpOnly, SameSite=Lax cookies, Secure in production, with seven-day expiry. Mutations check origin and protected handlers verify ownership. Source/draft/archive media are private; only reviewed published copies receive public delivery. The core and Foundry APIs have bounded JSON bodies and sanitized errors. Provider adapters fail explicitly without mock runtime substitutions.
 
 ## Durable creation lifecycle
 
-`QUEUED → PROCESSING_MEDIA → COMPLETED`; errors become `FAILED` with an explicit retry classification or `INDETERMINATE` for an unknown paid result. Persist progress before/after each bounded provider operation. Dispatch claims prevent duplicate initial starts; unique owner/request and job/asset-slot keys protect retries. Workflow steps have at most two automatic retries.
+`QUEUED → SCRIPT_READY → PROCESSING_MEDIA → COMPLETED`, with `FAILED` and `INDETERMINATE` outcomes:
 
-1. Signed direct upload; server verifies Cloudinary identity, authenticated delivery, actual format, size, duration, and ownership. Audio input limit is five minutes / 20 MB. Typed text is an explicit alternative.
-2. OpenAI transcription (`whisper-1` default), or persist submitted text.
-3. Exact Gemini `gemini-3.5-flash-lite`: strict polished text plus dynamically planned scenes (1–64), cultural/source-preserving instructions, reject blocked/empty/malformed output.
-4. Variable-length `tts-1-hd` requests with one voice (`onyx` default), raw 24 kHz mono 16-bit PCM. Store each completed scene privately.
-5. Variable-length OpenAI images (`gpt-image-2.5-sunburst` initially), validated PNGs uploaded privately. Missing config or rejection fails the job, never a placeholder.
-6. Fetch completed audio segments, count samples, assemble WAV, calculate continuous authoritative boundaries, save immutable snapshot, mark COMPLETED.
-7. Creator edits create a fresh immutable job/version with affected media invalidated. Explicit review is required for publication; reject stale versions and foreign owners.
-
-Network failures after potentially accepted paid requests are ambiguous: keep known assets, attempt recovery by reserved Cloudinary identity, otherwise require creator review. Never repeat an uncertain charge automatically. Completed versions remain private until promotion. Storage cleanup/retention of abandoned drafts and operator reconciliation of interrupted dispatch/sends remain operational responsibilities.
+1. Persist an owner-scoped idempotent job; verify uploaded audio before transcription. Typed text is an explicit alternative.
+2. Gemini generates/refines a contextual title, translates to the selected language, and segments narration into visual beats. Validate content shape, limits, language, references, and estimated timeline; preserve original input/transcript.
+3. Durable media steps generate audio and imagery in bounded batches. Foundry sends selected reference bytes/instructions to image edits; scenes without selected references use text-to-image. Completed assets are reused, confirmed transient failures have bounded retries, and ambiguous paid outcomes require reconciliation.
+4. Combine 24 kHz mono 16-bit PCM segments and derive scene boundaries from sample counts. Store narration and immutable Creator Studio snapshot; only explicit reviewed publication updates the public story. Revisions regenerate affected media/timing.
+5. Foundry instead packages private assets. With TTS bypass, no narration request/asset is required and timings stay estimated. A Foundry job completes only after all archive parts are verified. Notification failure remains independent of completion.
 
 ## API inventory
 
-All routes are under `/api/v1`. Successful protected operations require the verified cookie, persisted owner checks, and same-origin mutations. Unknown API routes return JSON 404, never the SPA.
+All routes below are relative to `/api/v1`. Catalog/direct public reads and bundled-media checks are public; other operations require the appropriate verified owner except OTP requests/verification.
 
-| Method / route | Behavior |
+| Routes | Purpose |
 |---|---|
-| GET `/health` | Database query health |
-| GET `/catalog?collection=...` | All published stories if omitted; invalid or `ALL` value returns 400 |
-| GET `/stories/:id`, `/creators/:username` | Public record independent of browse filters |
-| GET `/media-status?url=...` | Generated manifest lookup for bundled narration |
-| POST `/auth/otp/request`, `/auth/otp/verify` | Actual SMTP code request and verification |
-| GET `/auth/session`; POST `/auth/logout` | Cookie identity and revocation |
-| PATCH `/me/voice` | Persist owner voice preference |
-| GET `/bookmarks`; PUT/DELETE `/bookmarks/:storyId` | Account bookmarks |
-| POST `/uploads`; POST `/uploads/:id/complete` | Signed recording reservation and verified completion |
-| GET/POST `/creations` | Owner jobs / persist and dispatch new job (202) |
-| GET/PATCH `/creations/:id` | Owner status / immutable scene revision (202) |
-| POST `/creations/:id/retry` | Confirmed retryable failure only (202) |
-| POST `/versions/:id/publish` | `{ "reviewed": true }`; queue promotion (202) |
-| POST `/exports` | Retired: authenticated 410 FOUNDRY_REQUIRED |
-| GET `/exports/:id` | Archive and notification status |
-| GET `/exports/:id/download` | Owner authorization, then expiring media redirect |
-| POST `/exports/:id/notify` | Retry failed notification without regeneration (202) |
+| `GET /health`, `/catalog`, `/stories/:id`, `/creators/:username`, `/media-status` | Database health, discovery, public links, bundled-media availability |
+| `POST /auth/otp/request`, `/auth/otp/verify`; `GET /auth/session`; `POST /auth/logout` | Email-code and cookie-session lifecycle |
+| `PATCH /me/voice`; `GET /bookmarks`; `PUT/DELETE /bookmarks/:storyId` | Account preference and bookmarks |
+| `POST /uploads`, `/uploads/:id/complete` | Signed source audio upload and verified completion |
+| `GET/POST /creations`; `GET/PATCH /creations/:id`; `POST /creations/:id/retry`, `/creations/:id/notify` | Creator jobs, revisions, safe recovery, completion notification |
+| `POST /versions/:id/publish` | Reviewed Creator Studio publication |
+| `POST /exports` | Retired creation endpoint: authenticated `410 FOUNDRY_REQUIRED` |
+| `GET /exports/:id`, `/exports/:id/download`; `POST /exports/:id/notify` | Legacy compatibility and authorized recovery routing |
+| `POST /foundry/references`, `/foundry/references/:id/complete` | Owned reference uploads |
+| `GET/POST /foundry/jobs`; `GET /foundry/jobs/:id`; `POST /foundry/jobs/:id/retry` | Isolated Foundry processing |
+| `GET /foundry/exports`, `/foundry/exports/:id`, `/foundry/exports/:id/download`, `/foundry/exports/:id/parts/:partNumber/download` | Owned current/legacy packages and signed part redirects |
+| `POST /foundry/exports/:id/retry`, `/foundry/exports/:id/notify` | Archive-only or failed-email recovery |
 
-The former standalone placeholder-image endpoint is removed. Generation occurs only inside an authorized creation job. Provider and configuration errors return sanitized structured responses; unexpected database failures return JSON 503.
+`GET /catalog` accepts optional `collection` and `language`; omit to browse all, and reject invalid values with `400`. Search remains client-side. No paginated response or paid image-generation endpoint is advertised beyond the implemented job APIs.
 
 ## Export/email separation
 
-Foundry Workflow packages a completed Foundry plan or recovers an existing owned immutable export snapshot into ZIP, stores it privately, marks READY, then notifies. New arbitrary story-version exports are retired. Manifest checksums describe actual downloaded bytes. A stable `/?export=:id` link opens Studio Foundry and requires the owner before redirecting to a fresh signed archive URL. Email status is separate (`QUEUED`, `SENDING`, `SENT`, `FAILED`); failure leaves READY intact. Concurrent send claims prevent parallel duplicates; SMTP cannot guarantee exactly-once delivery. Investigate a stranded SENDING state before another send.
+ZIP planning first attempts one archive, then partitions when necessary. A bounded buffer checks final ZIP size before upload. PNG entries retain bytes; text/WAV use lossless DEFLATE. Oversized files become ordered byte chunks with whole-file/chunk SHA-256 and PowerShell/macOS/Linux reconstruction instructions. `oralia-foundry-assets-v2` includes scripts, timeline JSON/text, provenance, reference mapping, part inventory, and checksums; original reference files are excluded.
+
+Parts are named `foundry-export-part1.zip`, `foundry-export-part2.zip`, etc.; a fitting single package is `foundry-export.zip`. Actual raw-file allowance is queried rather than assuming all Cloudinary accounts have a fixed quota. Prior integration encountered a 10 MiB allowance; the application uses a 9 MiB ceiling as headroom. Individual durable steps build, privately upload, and verify parts. Resume uses persisted plans/ready parts without regenerating media. Parent READY requires every part; email retry never repackages.
+
+Export responses include `parts[]` with number, filename, bytes, checksum, status, and authorized link. Single downloads remain compatible; multipart parent download returns `409 MULTIPART_REQUIRED` with the part list. Owner-checked download routes mint expiring Cloudinary redirects. Completion mail lists links, not attachments. `?export=`, `?foundryExport=`, and `?foundryJob=` open Foundry and preserve sign-in intent. SMTP acceptance is not inbox proof; interrupted SENDING state needs reconciliation.
 
 ## Delivery and verification roadmap
 
-1. **Layout:** Responsive Vellum, Studio, Education, creator/profile navigation, both themes, keyboard and focus behavior.
-2. **Audio engine:** Single media clock, exact scene seeks, source replacement, format variation, buffering, image failure and explicit media errors; no timing-tone substitutions.
-3. **Studio production:** Real SMTP/cookies, signed uploads, durable generation, measured scenes, immutable review/publication, server archive and email-only retry. Verify interrupted workflows and ambiguous paid outcomes separately.
-4. **Discovery and curation:** Shared collections/region intersections, direct links, creator ownership, published catalog refresh. Offline/partial-download UI and bounded PWA storage remain future work; bookmarks do not cache audio.
+The RPI cycle is repository/provider research, a decision-complete plan with acceptance boundaries, implementation, then evidence-based verification; see [AGENTS.md](AGENTS.md#research-plan-implementation). Builds generate Prisma/media manifests and compile API/Workflow bundles without database access. Environment changes require hosted redeployment; schema/seeding are never build/request side effects.
 
-Run Prisma validation, isolated migration/domain/API/provider tests, then build sequentially. Validate actual packaged Node handlers plus API/static/Workflow routing. Check 320/390/768/1440 px in both themes, all seeded bylines and listening rooms, scene boundaries, OTP/header restoration, errors and export access. Real integration must separately prove inbox receipt, exact model access, media delivery/seeking, Workflow execution, and paid generation; compilation alone cannot establish these.
-
-## Dynamic generation update — 9 November 2026
-
-Creation is asynchronous: QUEUED → SCRIPT_READY → PROCESSING_MEDIA → COMPLETED, with FAILED/INDETERMINATE error states. Gemini dynamically chooses visual beats at roughly 15–30 seconds of narration per scene, within a safety ceiling of 64 scenes. One-minute narratives target 3–4 scenes; five-minute narratives target 12–20 or more. Historical seeded stories keep their existing four scenes.
-
-Workflow launches at most two narration steps, then two image steps per iteration. Each paid request has its own durable step and bounded retry; completed assets are reused and ambiguous paid outcomes require review. Narration WAV responses stream directly to authenticated Cloudinary upload streams. Image API Base64 JSON requires a bounded per-image decode before upload; no local media files are written. Final assembly measures actual PCM samples. Gemini boundaries remain estimates; GET /api/v1/creations/:id exposes measured boundaries and formatted MM:SS.mmm timestamps when complete.
-
-CreationJob persists totalScenes, processedScenes and independent notificationStatus. The status response includes completionPercentage (up to 95% during media preparation; 100% only after final assembly). COMPLETED means a private draft is ready for review, never automatic publication. Completion email uses real Gmail SMTP; POST /api/v1/creations/:id/notify retries a failed email without regenerating media. Interrupted SENDING notifications require operator reconciliation.
-
-OPENAI_API_KEY is server-only. Unset or blank OPENAI_STT_MODEL, OPENAI_TTS_MODEL and OPENAI_TTS_VOICE default to whisper-1, tts-1-hd and onyx. The existing configurable GPT image model remains selected; no automatic legacy DALL·E substitution occurs. Run db:migrate:turso for the reviewed dynamic-scene migration from the previous production schema, or db:migrate for local SQLite. Cloud verification compares logical column/index definitions, ignoring physical column ordinals after ALTER TABLE.
-
-The Gemini provider returns the complete polished narrative as ordered scene narrations. The server assembles polishedText exactly from those narrations, avoiding divergent duplicate story text. The original transcript remains separately preserved.
-
-## Studio Foundry — isolated production workspace
-
-Studio Foundry is a fourth, verified-creator mode. Creator Studio retains recording, generation, revision, review and Publish to Vellum; export controls and export-link handling live only in Foundry. Foundry remains isolated from Vellum publishing. Localized-title publication and the additive export-part/language-index migration are approved changes to the earlier frozen-core guardrail.
-
-Foundry reuses generic CreationJob records with storyId prefixed foundry: and a studio_foundry_v1 input discriminator. StoryExport source identifiers use foundry:<jobId>; MediaAsset slots and private Cloudinary paths are Foundry-specific. Core creation list/detail/retry/revision routes reject these records before invoking core services. Foundry never creates Story, KeyframeScene or StoryVersion rows. Historical export sources are read-only; recovery never regenerates their media.
-
-New projects accept 12,000-character scripts, 1–64 scenes, and up to four JPEG/PNG/WebP references of 3 MiB each, with required per-image instructions of at most 2,000 characters. Original submissions are preserved separately; processed narration and titles are faithfully localized into the selected target language. Gemini receives image bytes and matching notes, selects reference IDs, and supplies estimated continuous timing. OpenAI receives selected references through image edits, or uses text-to-image when none apply. Output is high-quality 1536×1024 PNG.
-
-AI narration is on by default. Bypass AI TTS prevents all voice requests and omits narration from the archive; its timing guide is explicitly estimated for studio recording. With TTS, narration streams privately to Cloudinary and sample-measured boundaries replace estimates. Paid work runs in individual durable steps, at most two operations concurrently. Unknown paid completion is never blindly retried.
-
-Foundry progresses QUEUED → SCRIPT_READY → PROCESSING_MEDIA → COMPLETED. COMPLETED requires a stored, verified archive. Notification status is independent; SMTP failure leaves downloads available and supports email-only retry. No placeholder media, fake email or runtime simulation is permitted.
-
-All new endpoints are under /api/v1/foundry:
-- POST /references; POST /references/:id/complete: signed private upload and metadata verification.
-- POST /jobs; GET /jobs; GET /jobs/:id; POST /jobs/:id/retry: owner-scoped submissions, progress, previews and safe retries.
-- GET /exports; GET /exports/:id; GET /exports/:id/download: owned current/legacy packages and fresh expiring download redirects.
-- POST /exports/:id/retry; POST /exports/:id/notify: archive-only recovery or failed-email retry.
-
-POST /api/v1/exports now returns authenticated 410 FOUNDRY_REQUIRED. Previously emailed legacy download URLs remain authorized and compatible. Old ?export= links and new ?foundryExport= / ?foundryJob= links open Foundry and retain that destination through real email sign-in.
-
-Each bounded ZIP part uses oralia-foundry-assets-v2: generated PNGs unchanged, script, JSON/text timeline, selected-reference IDs/notes, provenance, optional WAV and media checksums. Text/WAV entries use DEFLATE; original reference files are excluded. ZIP download integrity is verified before readiness. Failed uploads retain generated assets for packaging-only recovery; errors distinguish configuration, capacity, source reads, upload, verification and email.
-
-Cloudinary capacity is checked against the actual account allowance. New ZIPs are capped at 9 MiB each and automatically split into independently extractable parts; oversized original files use numbered byte chunks with whole-file/chunk SHA-256 checksums and reconstruction instructions. Do not downsample media. Completed parts are retained for retry; notification retry never repackages assets. Historical downloaded single ZIPs remain unchanged.
-
-## Localized creation and multipart packages
-
-Both creation workspaces use the shared target narration languages: en, zu, xh, sw, yo, ha, af, fr and pt (default en). Blank titles are allowed. New Gemini responses must contain polishedTitle, matching target-language metadata and complete ordered scene narration. Preserve meaningful titles through localization and replace weak/blank titles from narrative context. Assemble final story text from scenes; never truncate oversized translation or fabricate provider output. Original inputs/transcripts remain immutable. Historical plans without new fields use their input title/language. Revisions retain title/language metadata; publication stores the refined title. All audio boundaries remain sample-measured, or explicitly estimated when Foundry bypasses TTS.
-
-isiZulu, isiXhosa, Yoruba and Hausa voice quality is unverified under the configured OpenAI TTS provider. Keep them selectable with a review notice. Do not switch models automatically. Current Speech API models have a documented January 6, 2027 shutdown; track their separate migration. See [OpenAI TTS documentation](https://developers.openai.com/api/docs/guides/text-to-speech).
-
-Vellum's language filter combines with collection/search. GET /api/v1/catalog accepts optional language (nine codes only; omit for all, invalid values return 400), filters Story.language in Prisma, and retains its existing response shape/order without pagination. App retains a separate full catalog for direct story/profile links, while cancellable keyed discovery requests prevent stale results.
-
-Migration 20261109120000_localized_multipart adds Story language/publication indexes and ExportPart rows linked to StoryExport. It preserves existing records and single-file exports. Run db:migrate for local SQLite or db:migrate:turso for checksummed cloud deployment with an ignored backup. Never reset or reseed merely to apply it.
-
-Foundry export responses include parts[] with partNumber, filename, bytes, checksum, status and authorized downloadUrl. GET /api/v1/foundry/exports/:id/parts/:partNumber/download verifies the owner and parent readiness before redirecting. The original download route still serves single ZIPs; multipart exports return 409 MULTIPART_REQUIRED with the part list. Individual durable steps build, upload and verify each ZIP; READY/COMPLETED requires every part. Secure notification links list all parts; no binary email attachments. Legacy failed exports repackage only their immutable media, without generation or publication changes.
+Future extension points are a shared usage ledger/admission layer, dedicated paginated discovery queries, versioned style profiles, distribution-media derivatives, an explicit offline/download and draft-sync layer, and organization-aware authorization. These are proposals detailed in [RESEARCH.md](RESEARCH.md#production-expansion-priorities), not implemented services.
